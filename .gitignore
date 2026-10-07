@@ -1,0 +1,25 @@
+# Xcode: per-user state and build output
+xcuserdata/
+*.xcuserstate
+build/
+DerivedData/
+*.xcresult
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Secrets: signing material and environment files never belong here
+*.p8
+*.p12
+*.pem
+*.cer
+*.mobileprovision
+.env
+.env.*
+
+# macOS
+.DS_Store
