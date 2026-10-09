@@ -12,6 +12,9 @@ DerivedData/
 .build/
 .swiftpm/
 
+# Your own team and bundle ID prefix (see Config/Local.xcconfig.example)
+Config/Local.xcconfig
+
 # Secrets: signing material and environment files never belong here
 *.p8
 *.p12

@@ -76,11 +76,12 @@ struct DepartureTimelineProvider: AppIntentTimelineProvider {
             return DepartureEntry(date: .now, stationName: name, stationCode: code, departures: [], errorMessage: "No station configured")
         }
 
-        let baseURL = AppConfig.baseURL
-        let url = baseURL.appendingPathComponent("v1/locations/\(code)/departures")
+        guard let server = ServerSettings.current else {
+            return DepartureEntry(date: .now, stationName: name, stationCode: code, departures: [], errorMessage: "Open TrackSide to set up a server")
+        }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(for: server.request("v1/locations/\(code)/departures"))
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                 return DepartureEntry(date: .now, stationName: name, stationCode: code, departures: [], errorMessage: "Failed to load")
             }

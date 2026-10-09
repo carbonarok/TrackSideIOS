@@ -1,0 +1,18 @@
+// Build settings shared by the app and the widgets extension.
+//
+// Don't put your own values here. Copy Local.xcconfig.example to
+// Local.xcconfig, which git ignores, and set them there.
+
+// Your Apple Developer team ID: Xcode → Settings → Accounts, or Membership
+// details on developer.apple.com. Push notifications and Live Activity
+// pushes need a paid team.
+DEVELOPMENT_TEAM =
+
+// Everything that must be unique to you is built from this prefix:
+//   app          $(BUNDLE_ID_PREFIX).TrackSideIOS
+//   widgets      $(BUNDLE_ID_PREFIX).TrackSideIOS.TrackSideWidgets
+//   App Group    group.$(BUNDLE_ID_PREFIX).TrackSideIOS
+// Use a reverse domain you control.
+BUNDLE_ID_PREFIX = com.example
+
+#include? "Local.xcconfig"

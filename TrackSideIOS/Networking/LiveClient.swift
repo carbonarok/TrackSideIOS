@@ -5,7 +5,6 @@ import Foundation
 /// Handlers should refetch data via the REST API when notified.
 actor LiveClient {
     private var webSocketTask: URLSessionWebSocketTask?
-    private let url: URL
     private var subscribedTopics: Set<String> = []
     private var handlers: [UUID: @Sendable (Set<String>) -> Void] = [:]
     private var isConnected = false
@@ -13,10 +12,6 @@ actor LiveClient {
     /// Generation counter to prevent stale receive loops from triggering reconnects
     /// after the connection has already been replaced.
     private var connectionGeneration: Int = 0
-
-    init(url: URL) {
-        self.url = url
-    }
 
     /// Register a handler that is called when subscribed topics change.
     /// Returns an ID to remove the handler later.
@@ -82,15 +77,22 @@ actor LiveClient {
 
     // MARK: - Private
 
-    /// Create a new WebSocket connection, start the receive loop, and re-subscribe all topics.
+    /// Create a new WebSocket connection to the server set in Settings, start
+    /// the receive loop, and re-subscribe all topics.
     private func establishConnection() {
+        guard let server = ServerSettings.current else {
+            print("[LiveClient] No server set up yet")
+            return
+        }
         connectionGeneration += 1
         let gen = connectionGeneration
+        var request = URLRequest(url: server.webSocketURL)
+        server.authorize(&request)
         let session = URLSession(configuration: .default)
-        webSocketTask = session.webSocketTask(with: url)
+        webSocketTask = session.webSocketTask(with: request)
         webSocketTask?.resume()
         isConnected = true
-        print("[LiveClient] Connecting (generation \(gen)) to \(url)")
+        print("[LiveClient] Connecting (generation \(gen)) to \(server.webSocketURL)")
         Task { await receiveLoop(generation: gen) }
 
         // Re-subscribe any previously tracked topics

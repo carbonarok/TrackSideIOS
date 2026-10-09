@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 import BackgroundTasks
 
 @main
@@ -10,7 +11,7 @@ struct TrackSideIOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        let client = LiveClient(url: AppConfig.webSocketURL)
+        let client = LiveClient()
         _liveClient = State(initialValue: client)
         _journeyManager = State(initialValue: ActiveJourneyManager(liveClient: client))
 
@@ -30,6 +31,9 @@ struct TrackSideIOSApp: App {
         WindowGroup {
             ContentView(liveClient: liveClient)
                 .environment(journeyManager)
+                .onReceive(NotificationCenter.default.publisher(for: ServerSettings.didChange)) { _ in
+                    Task { await liveClient.ensureConnected() }
+                }
         }
         .modelContainer(for: [SavedRoute.self, FavouriteStation.self, JourneyRecord.self])
         .onChange(of: scenePhase) { _, newPhase in

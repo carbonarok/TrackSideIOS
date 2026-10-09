@@ -2,6 +2,7 @@ import Foundation
 
 enum APIError: Error, LocalizedError {
     case invalidURL
+    case notConfigured
     case httpError(statusCode: Int, message: String)
     case decodingError(String)
     case networkError(String)
@@ -10,6 +11,8 @@ enum APIError: Error, LocalizedError {
         switch self {
         case .invalidURL:
             return "Invalid URL"
+        case .notConfigured:
+            return "No server set up. Add one in Settings → Server."
         case .httpError(let code, let message):
             return "HTTP \(code): \(message)"
         case .decodingError(let detail):
@@ -21,18 +24,25 @@ enum APIError: Error, LocalizedError {
 }
 
 struct APIClient {
-    let baseURL: URL
+    /// A fixed server, or nil for whichever is set in Settings at the time
+    /// of each request.
+    private let fixedServer: ServerConnection?
 
-    init(baseURL: URL = AppConfig.baseURL) {
-        self.baseURL = baseURL
+    init(server: ServerConnection? = nil) {
+        self.fixedServer = server
+    }
+
+    private func server() throws -> ServerConnection {
+        if let fixedServer { return fixedServer }
+        guard let current = ServerSettings.current else { throw APIError.notConfigured }
+        return current
     }
 
     // MARK: - Locations
 
     func searchLocations(query: String) async throws -> [Location] {
-        var components = URLComponents(url: baseURL.appendingPathComponent("v1/locations"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "q", value: query)]
-        let response: LocationSearchResponse = try await fetch(from: components.url!)
+        let request = try server().request("v1/locations", query: [URLQueryItem(name: "q", value: query)])
+        let response: LocationSearchResponse = try await fetch(request)
         return response.locations
     }
 
@@ -44,16 +54,11 @@ struct APIClient {
         at: String? = nil,
         window: Int? = nil
     ) async throws -> Board {
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("v1/locations/\(code)/departures"),
-            resolvingAgainstBaseURL: false
-        )!
         var items: [URLQueryItem] = []
         if let to { items.append(.init(name: "to", value: to)) }
         if let at { items.append(.init(name: "at", value: at)) }
         if let window { items.append(.init(name: "window", value: "\(window)")) }
-        if !items.isEmpty { components.queryItems = items }
-        return try await fetch(from: components.url!)
+        return try await fetch(server().request("v1/locations/\(code)/departures", query: items))
     }
 
     // MARK: - Arrivals
@@ -64,34 +69,23 @@ struct APIClient {
         at: String? = nil,
         window: Int? = nil
     ) async throws -> Board {
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("v1/locations/\(code)/arrivals"),
-            resolvingAgainstBaseURL: false
-        )!
         var items: [URLQueryItem] = []
         if let from { items.append(.init(name: "from", value: from)) }
         if let at { items.append(.init(name: "at", value: at)) }
         if let window { items.append(.init(name: "window", value: "\(window)")) }
-        if !items.isEmpty { components.queryItems = items }
-        return try await fetch(from: components.url!)
+        return try await fetch(server().request("v1/locations/\(code)/arrivals", query: items))
     }
 
     // MARK: - Services
 
     func serviceDetail(uid: String, date: String) async throws -> ServiceDetail {
-        let url = baseURL.appendingPathComponent("v1/services/\(uid)/\(date)")
-        return try await fetch(from: url)
+        try await fetch(server().request("v1/services/\(uid)/\(date)"))
     }
 
     func searchServices(query: String, date: String? = nil) async throws -> [ServiceSummary] {
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("v1/services"),
-            resolvingAgainstBaseURL: false
-        )!
         var items: [URLQueryItem] = [.init(name: "q", value: query)]
         if let date { items.append(.init(name: "date", value: date)) }
-        components.queryItems = items
-        let response: ServiceSearchResponse = try await fetch(from: components.url!)
+        let response: ServiceSearchResponse = try await fetch(server().request("v1/services", query: items))
         return response.services
     }
 
@@ -101,9 +95,12 @@ struct APIClient {
     /// Returns the HTTP status code. Non-throwing for 503 (no APNs key configured).
     @discardableResult
     func registerActivity(body: [String: Any]) async -> Int {
-        let url = baseURL.appendingPathComponent("v1/activities/register")
         do {
-            let (_, response) = try await jsonPost(to: url, body: body)
+            var request = try server().request("v1/activities/register")
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (_, response) = try await URLSession.shared.data(for: request)
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             print("[APIClient] POST /v1/activities/register → \(code)")
             return code
@@ -115,9 +112,10 @@ struct APIClient {
 
     /// Deregister a Live Activity.
     func deregisterActivity(activityID: String) async {
-        let url = baseURL.appendingPathComponent("v1/activities/\(activityID)")
         do {
-            let (_, response) = try await jsonDelete(from: url)
+            var request = try server().request("v1/activities/\(activityID)")
+            request.httpMethod = "DELETE"
+            let (_, response) = try await URLSession.shared.data(for: request)
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             print("[APIClient] DELETE /v1/activities/\(activityID) → \(code)")
         } catch {
@@ -127,8 +125,8 @@ struct APIClient {
 
     // MARK: - Generic Fetch
 
-    private func fetch<T: Decodable>(from url: URL) async throws -> T {
-        let (data, response) = try await URLSession.shared.data(from: url)
+    private func fetch<T: Decodable>(_ request: URLRequest) async throws -> T {
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw APIError.networkError("Invalid response")
         }
@@ -142,19 +140,5 @@ struct APIClient {
         } catch {
             throw APIError.decodingError(error.localizedDescription)
         }
-    }
-
-    private func jsonPost(to url: URL, body: [String: Any]) async throws -> (Data, URLResponse) {
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try await URLSession.shared.data(for: request)
-    }
-
-    private func jsonDelete(from url: URL) async throws -> (Data, URLResponse) {
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        return try await URLSession.shared.data(for: request)
     }
 }

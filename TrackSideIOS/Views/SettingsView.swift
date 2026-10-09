@@ -1,10 +1,24 @@
 import SwiftUI
+import Combine
 
 struct SettingsView: View {
     @State private var settings = LiveActivitySettings.load()
+    @State private var server = ServerSettings.current
 
     var body: some View {
         Form {
+            Section {
+                NavigationLink {
+                    ServerSettingsView()
+                } label: {
+                    LabeledContent {
+                        Text(server?.displayName ?? "Not set up")
+                    } label: {
+                        Label("Server", systemImage: "server.rack")
+                    }
+                }
+            }
+
             Section {
                 Toggle("Countdown Timer", systemImage: "clock", isOn: $settings.showCountdown)
                 Toggle("Next Connection", systemImage: "arrow.triangle.swap", isOn: $settings.showNextConnection)
@@ -45,6 +59,9 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .onReceive(NotificationCenter.default.publisher(for: ServerSettings.didChange)) { _ in
+            server = ServerSettings.current
+        }
         .onChange(of: settings) {
             settings.save()
         }

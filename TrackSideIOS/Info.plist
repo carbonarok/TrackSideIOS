@@ -6,6 +6,13 @@
 	<array>
 		<string>com.trackside.journey-refresh</string>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>TrackSideAppGroup</key>
+	<string>group.$(BUNDLE_ID_PREFIX).TrackSideIOS</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
