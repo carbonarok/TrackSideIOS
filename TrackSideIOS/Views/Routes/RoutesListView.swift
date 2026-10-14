@@ -70,44 +70,83 @@ struct RoutesListView: View {
         .sheet(item: $routeToEdit) { route in
             RouteEditorView(liveClient: liveClient, existingRoute: route)
         }
-        .navigationDestination(for: SavedRoute.self) { route in
-            RouteDetailView(route: route, liveClient: liveClient)
-        }
     }
 
     @ViewBuilder
     private func routeRow(_ route: SavedRoute) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let legs = route.sortedLegs
+
+        VStack(alignment: .leading, spacing: 8) {
             Text(route.name)
                 .font(.headline)
 
-            HStack(spacing: 4) {
-                ForEach(Array(route.sortedLegs.enumerated()), id: \.element.id) { index, leg in
+            // Visual route line with station names
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(Array(legs.enumerated()), id: \.element.id) { index, leg in
                     if index > 0 {
-                        Image(systemName: "arrow.right")
+                        // Connection indicator
+                        VStack(spacing: 0) {
+                            Rectangle()
+                                .fill(.secondary.opacity(0.3))
+                                .frame(height: 2)
+                                .frame(maxWidth: .infinity)
+                            Text("change")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.top, 5)
+                    }
+
+                    // Station dot + name
+                    VStack(spacing: 3) {
+                        Circle()
+                            .fill(index == 0 ? .green : .blue)
+                            .frame(width: 10, height: 10)
+                        Text(leg.originName)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
-                    Text(leg.originCode)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
-                if let lastLeg = route.sortedLegs.last, let dest = lastLeg.destinationCode {
-                    Image(systemName: "arrow.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(dest)
-                        .font(.caption)
-                        .fontWeight(.medium)
+                    .frame(minWidth: 44)
+
+                    // Line between origin and destination of this leg
+                    VStack(spacing: 0) {
+                        Rectangle()
+                            .fill(.blue.opacity(0.4))
+                            .frame(height: 2)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .padding(.top, 5)
+
+                    // Final destination (only on last leg)
+                    if index == legs.count - 1 {
+                        VStack(spacing: 3) {
+                            Circle()
+                                .fill(.red)
+                                .frame(width: 10, height: 10)
+                            Text(leg.destinationName ?? leg.destinationCode ?? "")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .frame(minWidth: 44)
+                    }
                 }
             }
-            .foregroundStyle(.secondary)
 
-            Text("\(route.sortedLegs.count) leg\(route.sortedLegs.count == 1 ? "" : "s")")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            // Stats row
+            HStack(spacing: 8) {
+                Label("\(legs.count) train\(legs.count == 1 ? "" : "s")", systemImage: "tram.fill")
+                if legs.count > 1 {
+                    Label("\(legs.count - 1) change\(legs.count > 2 ? "s" : "")", systemImage: "arrow.triangle.swap")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 
     private func reverseRoute(_ route: SavedRoute) {

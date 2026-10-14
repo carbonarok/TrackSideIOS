@@ -9,6 +9,10 @@ struct CalculatedLeg: Identifiable {
     let serviceDetail: ServiceDetail?
     let originName: String
     let destinationName: String
+    /// Where this leg is left: the saved leg's station (CRS or TIPLOC). It
+    /// can be before the train's terminus, so never use the service's
+    /// destination for it.
+    let destinationCode: String
     let departureTime: String?
     let arrivalTime: String?
     let departurePlatform: String?
@@ -28,7 +32,8 @@ struct CalculatedLeg: Identifiable {
 }
 
 /// A fully calculated journey across all legs of a route
-struct CalculatedJourney {
+struct CalculatedJourney: Identifiable {
+    let id = UUID()
     let legs: [CalculatedLeg]
     let departureTime: String?
     let arrivalTime: String?
@@ -55,6 +60,7 @@ struct CalculatedJourney {
 @Observable
 final class JourneyCalculator {
     var journey: CalculatedJourney?
+    var journeys: [CalculatedJourney] = []
     var isCalculating = false
     var error: String?
 
@@ -84,51 +90,56 @@ final class JourneyCalculator {
                 return
             }
 
-            // Fetch departures from this leg's origin, filtered to destination
-            let atString = formatForAPI(nextEarliestDeparture)
-            let board: Board?
-            do {
-                board = try await apiClient.departures(
-                    for: leg.originCode,
-                    to: destCode,
-                    at: atString,
-                    window: 120
-                )
-            } catch {
-                self.error = "Failed to load departures for \(leg.originName): \(error.localizedDescription)"
-                isCalculating = false
-                return
-            }
-
-            guard let board else {
-                error = "No departures found from \(leg.originName)"
-                isCalculating = false
-                return
-            }
-
-            // Filter services by preferred platforms
+            // Search for departures, expanding the window until we find a
+            // suitable service or reach end of day.
             let depPlatforms = parsePlatforms(leg.preferredDeparturePlatform)
-            let matchingServices = board.services.filter { service in
-                // Must not be cancelled
-                if service.isCancelled { return false }
-                // Must depart at or after our earliest time
-                if let depTime = service.stop.departure?.bestTime ?? service.stop.departure?.`public`,
-                   let depDate = parseTime(depTime),
-                   depDate < nextEarliestDeparture {
-                    return false
+            var searchFrom = nextEarliestDeparture
+            let endOfDay = endOfCurrentDay(from: nextEarliestDeparture)
+            var matchingServices: [BoardService] = []
+
+            while searchFrom < endOfDay {
+                let atString = formatForAPI(searchFrom)
+                let board: Board?
+                do {
+                    board = try await apiClient.departures(
+                        for: leg.originCode,
+                        to: destCode,
+                        at: atString,
+                        window: 120
+                    )
+                } catch {
+                    self.error = "Failed to load departures for \(leg.originName): \(error.localizedDescription)"
+                    isCalculating = false
+                    return
                 }
-                // Platform filter
-                if !depPlatforms.isEmpty {
-                    let currentPlatform = service.stop.platform?.displayPlatform ?? ""
-                    if !currentPlatform.isEmpty && !depPlatforms.contains(currentPlatform) {
-                        return false
+
+                guard let board else {
+                    // No board at all — advance and retry
+                    searchFrom = searchFrom.addingTimeInterval(120 * 60)
+                    continue
+                }
+
+                matchingServices = board.services.filter { service in
+                    // Skip cancelled services
+                    if service.isCancelled { return false }
+                    // Platform filter (if the user set preferred platforms)
+                    if !depPlatforms.isEmpty {
+                        let currentPlatform = service.stop.platform?.displayPlatform ?? ""
+                        if !currentPlatform.isEmpty && !depPlatforms.contains(currentPlatform) {
+                            return false
+                        }
                     }
+                    return true
                 }
-                return true
+
+                if !matchingServices.isEmpty { break }
+
+                // No suitable services in this window — advance and search again
+                searchFrom = searchFrom.addingTimeInterval(120 * 60)
             }
 
             guard let bestService = matchingServices.first else {
-                error = "No suitable train found from \(leg.originName) to \(leg.destinationName ?? destCode) after \(formatDisplayTime(nextEarliestDeparture))"
+                error = "No suitable train found from \(leg.originName) to \(leg.destinationName ?? destCode) today"
                 isCalculating = false
                 return
             }
@@ -179,6 +190,7 @@ final class JourneyCalculator {
                             serviceDetail: altDetail,
                             originName: leg.originName,
                             destinationName: leg.destinationName ?? destCode,
+                            destinationCode: destCode,
                             departureTime: altService.stop.departure?.bestTime ?? altService.stop.departure?.`public`,
                             arrivalTime: altArrivalTime,
                             departurePlatform: altService.stop.platform?.displayPlatform,
@@ -220,6 +232,7 @@ final class JourneyCalculator {
                 serviceDetail: serviceDetail,
                 originName: leg.originName,
                 destinationName: leg.destinationName ?? destCode,
+                destinationCode: destCode,
                 departureTime: bestService.stop.departure?.bestTime ?? bestService.stop.departure?.`public`,
                 arrivalTime: arrivalTime,
                 departurePlatform: bestService.stop.platform?.displayPlatform,
@@ -250,6 +263,41 @@ final class JourneyCalculator {
         isCalculating = false
     }
 
+    /// Calculate multiple consecutive journeys for the route
+    func calculateMultiple(route: SavedRoute, departAt: Date, count: Int = 5) async {
+        isCalculating = true
+        error = nil
+        journeys = []
+        journey = nil
+
+        var results: [CalculatedJourney] = []
+        var nextDeparture = departAt
+
+        for _ in 0..<count {
+            // Calculate a single journey starting at nextDeparture
+            await calculate(route: route, departAt: nextDeparture)
+
+            guard let found = journey else {
+                // No more journeys found — stop searching
+                break
+            }
+
+            results.append(found)
+
+            // Next search starts 1 minute after this journey's first departure
+            if let depTime = found.departureTime, let depDate = parseTime(depTime) {
+                nextDeparture = depDate.addingTimeInterval(60)
+            } else {
+                break
+            }
+        }
+
+        journeys = results
+        journey = results.first
+        error = results.isEmpty ? (error ?? "No journeys found") : nil
+        isCalculating = false
+    }
+
     // MARK: - Helpers
 
     private func parsePlatforms(_ value: String?) -> Set<String> {
@@ -270,6 +318,13 @@ final class JourneyCalculator {
         formatter.dateFormat = "HH:mm"
         formatter.timeZone = TimeZone(identifier: "Europe/London")
         return formatter.string(from: date)
+    }
+
+    /// End of the current day (midnight) in UK timezone
+    private func endOfCurrentDay(from date: Date) -> Date {
+        var calendar = Calendar.current
+        calendar.timeZone = TimeZone(identifier: "Europe/London")!
+        return calendar.startOfDay(for: date).addingTimeInterval(24 * 60 * 60)
     }
 }
 

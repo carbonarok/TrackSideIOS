@@ -13,6 +13,17 @@
 	</dict>
 	<key>TrackSideAppGroup</key>
 	<string>group.$(BUNDLE_ID_PREFIX).TrackSideIOS</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>TrackSide</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>trackside</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

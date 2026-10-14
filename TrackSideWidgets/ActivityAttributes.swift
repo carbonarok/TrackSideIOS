@@ -48,6 +48,8 @@ struct LegActivityAttributes: ActivityAttributes {
     let legIndex: Int
     let totalLegs: Int
     let headcode: String
+    let uid: String
+    let runDate: String
     let originName: String
     let destinationName: String
     let operatorName: String

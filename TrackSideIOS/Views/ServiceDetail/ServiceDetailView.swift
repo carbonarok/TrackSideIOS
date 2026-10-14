@@ -5,8 +5,8 @@ struct ServiceDetailView: View {
     let runDate: String
     let liveClient: LiveClient
 
+    @Environment(ActiveJourneyManager.self) private var journeyManager
     @State private var service: ServiceDetailService
-    @State private var liveActivityService: LiveActivityService
     @State private var trackingError: String?
 
     init(uid: String, runDate: String, liveClient: LiveClient) {
@@ -14,7 +14,6 @@ struct ServiceDetailView: View {
         self.runDate = runDate
         self.liveClient = liveClient
         self._service = State(initialValue: ServiceDetailService(liveClient: liveClient))
-        self._liveActivityService = State(initialValue: LiveActivityService(liveClient: liveClient))
     }
 
     var body: some View {
@@ -431,18 +430,19 @@ struct ServiceDetailView: View {
 
     @ViewBuilder
     private func trackButton(_ detail: ServiceDetail) -> some View {
-        let serviceKey = detail.id
-        let isTracking = liveActivityService.isTracking(serviceKey)
+        let isTracking = journeyManager.isTracking
 
         Button {
             if isTracking {
-                liveActivityService.stopTracking(key: serviceKey)
+                journeyManager.stopTracking()
             } else {
-                do {
-                    let destCRS = detail.destination.first?.crs
-                    try liveActivityService.startTracking(service: detail, destinationCRS: destCRS)
-                } catch {
-                    trackingError = "Could not start tracking: \(error.localizedDescription)"
+                Task {
+                    do {
+                        let journey = buildJourney(from: detail)
+                        try await journeyManager.startTracking(journey: journey)
+                    } catch {
+                        trackingError = "Could not start tracking: \(error.localizedDescription)"
+                    }
                 }
             }
         } label: {
@@ -470,6 +470,53 @@ struct ServiceDetailView: View {
         }
         .tint(.primary)
         .padding(.vertical, 4)
+    }
+
+    /// Build a single-leg CalculatedJourney from a ServiceDetail for ad-hoc tracking
+    private func buildJourney(from detail: ServiceDetail) -> CalculatedJourney {
+        let originStop = detail.stops.first(where: { $0.kind == .origin || $0.startsHere == true }) ?? detail.stops.first
+        let destStop = detail.stops.last(where: { $0.kind == .destination || $0.terminatesHere == true }) ?? detail.stops.last
+
+        let boardService = BoardService(
+            uid: detail.uid,
+            runDate: detail.runDate,
+            headcode: detail.headcode,
+            operator: detail.operator,
+            isPassenger: detail.isPassenger,
+            status: detail.status,
+            origin: detail.origin,
+            destination: detail.destination,
+            cancelReasonCode: detail.cancelReasonCode,
+            cancelReasonCodeDescription: detail.cancelReasonCodeDescription,
+            cancelReason: detail.cancelReason,
+            lateReason: detail.lateReason,
+            plannedCancel: detail.plannedCancel,
+            stop: originStop ?? detail.stops[0]
+        )
+
+        let leg = CalculatedLeg(
+            legIndex: 0,
+            service: boardService,
+            serviceDetail: detail,
+            originName: originStop?.name ?? detail.originName,
+            destinationName: destStop?.name ?? detail.destinationName,
+            destinationCode: destStop?.crs ?? destStop?.tiploc ?? detail.destination.first?.tiploc ?? "",
+            departureTime: originStop?.departure?.bestTime ?? originStop?.departure?.`public`,
+            arrivalTime: destStop?.arrival?.bestTime ?? destStop?.arrival?.`public`,
+            departurePlatform: originStop?.platform?.displayPlatform,
+            arrivalPlatform: destStop?.platform?.displayPlatform,
+            departureDelay: originStop?.departure?.delayMinutes,
+            arrivalDelay: destStop?.arrival?.delayMinutes,
+            isCancelled: detail.isCancelled,
+            connectionMinutes: nil
+        )
+
+        return CalculatedJourney(
+            legs: [leg],
+            departureTime: leg.departureTime,
+            arrivalTime: leg.arrivalTime,
+            requestedTime: Date()
+        )
     }
 
     // MARK: - Association Row

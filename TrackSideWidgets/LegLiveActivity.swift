@@ -6,6 +6,7 @@ struct LegLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: LegActivityAttributes.self) { context in
             LegLockScreenView(context: context)
+                .widgetURL(URL(string: "trackside://service?uid=\(context.attributes.uid)&date=\(context.attributes.runDate)"))
         } dynamicIsland: { context in
             let state = context.state
             let attrs = context.attributes
@@ -136,9 +137,17 @@ struct LegLiveActivity: Widget {
                     Image(systemName: phaseIcon(state.phase))
                         .font(.caption2)
                         .foregroundStyle(phaseColor(state))
-                    Text(attrs.headcode)
-                        .font(.caption2)
-                        .fontWeight(.bold)
+                    if state.phase == "onTrain" || state.phase == "arrived" {
+                        Text(state.expectedArrival ?? state.scheduledArrival ?? attrs.headcode)
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(state.expectedArrival != nil ? .orange : .primary)
+                    } else {
+                        Text(state.expectedDeparture ?? state.scheduledDeparture ?? attrs.headcode)
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(state.expectedDeparture != nil ? .orange : .primary)
+                    }
                 }
             } compactTrailing: {
                 if state.isCancelled {

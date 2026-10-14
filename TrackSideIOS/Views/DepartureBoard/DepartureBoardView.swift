@@ -15,6 +15,8 @@ struct DepartureBoardView: View {
     @State private var isSearchingServices = false
     @AppStorage("lastStationCode") private var lastStationCode = ""
     @AppStorage("lastStationName") private var lastStationName = ""
+    @State private var callingAtFilter = ""
+    @State private var showCallingAtSearch = false
 
     private let apiClient = APIClient()
 
@@ -127,23 +129,44 @@ struct DepartureBoardView: View {
                             let location = Location(tiploc: station.code, crs: station.code.count == 3 ? station.code : nil, name: station.name)
                             selectStation(location)
                         } label: {
-                            HStack {
-                                Image(systemName: "star.fill")
-                                    .foregroundStyle(.yellow)
-                                    .font(.caption)
+                            HStack(spacing: 12) {
+                                // Station icon with accent
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(.blue.opacity(0.1))
+                                        .frame(width: 40, height: 40)
+                                    Image(systemName: "train.side.front.car")
+                                        .font(.body)
+                                        .foregroundStyle(.blue)
+                                }
+
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(station.name)
                                         .font(.body)
+                                        .fontWeight(.medium)
                                         .foregroundStyle(.primary)
-                                    Text(station.code)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    HStack(spacing: 6) {
+                                        Text(station.code)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1)
+                                            .background(.secondary.opacity(0.1))
+                                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                                        Image(systemName: "star.fill")
+                                            .font(.system(size: 8))
+                                            .foregroundStyle(.yellow)
+                                    }
+                                    .foregroundStyle(.secondary)
                                 }
+
                                 Spacer()
+
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
                             }
+                            .padding(.vertical, 4)
                         }
                     }
                     .onDelete { offsets in
@@ -179,6 +202,30 @@ struct DepartureBoardView: View {
                 .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
 
+            // Cached data banner
+            if boardService.isCachedData {
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Showing cached data")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                            Text("Pull to refresh for live times")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if boardService.isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
             // Service search
             Section {
                 serviceSearchBar
@@ -193,6 +240,48 @@ struct DepartureBoardView: View {
                     }
                 } header: {
                     Text("\(serviceResults.count) services found")
+                }
+            }
+
+            // Calling at filter
+            Section {
+                if showCallingAtSearch {
+                    HStack {
+                        Image(systemName: "line.3.horizontal.decrease")
+                            .foregroundStyle(.blue)
+                        TextField("Calling at station code (e.g. RDG)", text: $callingAtFilter)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                        if !callingAtFilter.isEmpty {
+                            Button {
+                                callingAtFilter = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        Button {
+                            showCallingAtSearch = false
+                            callingAtFilter = ""
+                        } label: {
+                            Text("Done")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                } else {
+                    Button {
+                        showCallingAtSearch = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "line.3.horizontal.decrease")
+                            Text("Filter by calling point")
+                                .font(.subheadline)
+                            Spacer()
+                        }
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -216,13 +305,19 @@ struct DepartureBoardView: View {
 
             // Services
             Section {
-                ForEach(board.services) { service in
+                let filtered = filteredServices(board.services)
+                ForEach(filtered) { service in
                     NavigationLink(value: service) {
                         BoardServiceRow(service: service)
                     }
                 }
             } header: {
-                Text("\(board.services.count) \(boardService.mode.rawValue.lowercased())")
+                let filtered = filteredServices(board.services)
+                if !callingAtFilter.isEmpty {
+                    Text("\(filtered.count) of \(board.services.count) \(boardService.mode.rawValue.lowercased()) calling at \(callingAtFilter.uppercased())")
+                } else {
+                    Text("\(board.services.count) \(boardService.mode.rawValue.lowercased())")
+                }
             }
         }
         .listStyle(.plain)
@@ -364,6 +459,17 @@ struct DepartureBoardView: View {
     private func reload() async {
         guard let code = selectedStation?.displayCode ?? (lastStationCode.isEmpty ? nil : lastStationCode) else { return }
         await boardService.loadBoard(for: code, mode: boardService.mode)
+    }
+
+    /// Filter services by calling point — checks if any destination matches the filter code
+    private func filteredServices(_ services: [BoardService]) -> [BoardService] {
+        let code = callingAtFilter.trimmingCharacters(in: .whitespaces).uppercased()
+        guard !code.isEmpty else { return services }
+        return services.filter { service in
+            service.destination.contains { dest in
+                dest.crs?.uppercased() == code || dest.tiploc.uppercased() == code || dest.name.localizedCaseInsensitiveContains(code)
+            }
+        }
     }
 
     private func messageSeverityIcon(_ severity: Int) -> String {

@@ -12,20 +12,11 @@ struct BoardServiceRow: View {
                     .frame(width: 4, height: 44)
             }
 
-            // Time column
-            VStack(alignment: .trailing, spacing: 2) {
-                TimeDisplay(service.stop.departure ?? service.stop.arrival, showDelay: false)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-
-                if let delay = (service.stop.departure ?? service.stop.arrival)?.delayMinutes, delay > 0 {
-                    Text("+\(delay) min")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(delay >= 10 ? .red : .orange)
-                }
-            }
-            .frame(width: 65, alignment: .trailing)
+            // Time column — shows scheduled time, or strikethrough + live time when delayed
+            TimeDisplay(service.stop.departure ?? service.stop.arrival)
+                .font(.body)
+                .fontWeight(.semibold)
+                .frame(width: 75, alignment: .trailing)
 
             // Platform
             PlatformBadge(platform: service.stop.platform)

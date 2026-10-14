@@ -15,13 +15,23 @@ struct JourneyHistoryView: View {
                 }
             } else {
                 List {
-                    ForEach(records) { record in
-                        recordRow(record)
+                    // Stats summary
+                    Section {
+                        statsSummary
                     }
-                    .onDelete { offsets in
-                        for index in offsets {
-                            modelContext.delete(records[index])
+
+                    // Records
+                    Section {
+                        ForEach(records) { record in
+                            recordRow(record)
                         }
+                        .onDelete { offsets in
+                            for index in offsets {
+                                modelContext.delete(records[index])
+                            }
+                        }
+                    } header: {
+                        Text("\(records.count) journey\(records.count == 1 ? "" : "s")")
                     }
                 }
                 .listStyle(.plain)
@@ -114,6 +124,41 @@ struct JourneyHistoryView: View {
         }
         .padding(.vertical, 4)
     }
+
+    // MARK: - Stats Summary
+
+    @ViewBuilder
+    private var statsSummary: some View {
+        let onTimeCount = records.filter { $0.maxDelayMinutes < 5 && !$0.wasCancelled }.count
+        let cancelledCount = records.filter { $0.wasCancelled }.count
+        let avgDelay = records.isEmpty ? 0 : records.map(\.maxDelayMinutes).reduce(0, +) / records.count
+        let onTimePercent = records.isEmpty ? 0 : Int(Double(onTimeCount) / Double(records.count) * 100)
+
+        HStack(spacing: 0) {
+            statCard(value: "\(onTimePercent)%", label: "On Time", color: onTimePercent >= 80 ? .green : .orange)
+            Divider().frame(height: 36)
+            statCard(value: "\(avgDelay)m", label: "Avg Delay", color: avgDelay < 5 ? .green : avgDelay < 10 ? .orange : .red)
+            Divider().frame(height: 36)
+            statCard(value: "\(cancelledCount)", label: "Cancelled", color: cancelledCount == 0 ? .green : .red)
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func statCard(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.title3)
+                .fontWeight(.bold)
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Helpers
 
     private func formatTime(_ date: Date) -> String {
         let formatter = DateFormatter()

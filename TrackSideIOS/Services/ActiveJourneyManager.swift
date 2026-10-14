@@ -29,7 +29,8 @@ final class ActiveJourneyManager {
     var onJourneyComplete: ((JourneyRecord) -> Void)?
 
     /// Start tracking a journey, stopping any existing tracking first.
-    func startTracking(journey: CalculatedJourney, routeID: PersistentIdentifier) async throws {
+    /// Pass `nil` for `routeID` when tracking ad-hoc from a service detail view.
+    func startTracking(journey: CalculatedJourney, routeID: PersistentIdentifier? = nil) async throws {
         stopTracking()
         cleanUpStaleActivities()
 

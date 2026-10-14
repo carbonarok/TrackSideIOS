@@ -4,6 +4,7 @@ import UserNotifications
 import SwiftData
 import Observation
 import BackgroundTasks
+import UIKit
 
 /// Tracks a calculated journey via WebSocket, refreshing service details
 /// when trains change and updating a Live Activity with the journey state.
@@ -91,6 +92,8 @@ final class JourneyTracker {
                 legIndex: index,
                 totalLegs: journey.totalLegs,
                 headcode: headcode,
+                uid: leg.service.uid,
+                runDate: leg.service.runDate,
                 originName: leg.originName,
                 destinationName: leg.destinationName,
                 operatorName: leg.service.operator?.name ?? ""
@@ -257,8 +260,7 @@ final class JourneyTracker {
 
         // Find the origin and destination stops in the fresh detail
         let originStop = detail.stops.first { $0.crs == original.service.stop.crs || $0.tiploc == original.service.stop.tiploc }
-        let destCode = journey.legs[index].service.destination.first?.crs
-            ?? journey.legs[index].service.destination.first?.tiploc ?? ""
+        let destCode = journey.legs[index].destinationCode
         let destStop = detail.stops.last { $0.crs == destCode || $0.tiploc == destCode }
 
         let freshDepartureTime = originStop?.departure?.bestTime ?? original.departureTime
@@ -286,6 +288,7 @@ final class JourneyTracker {
             serviceDetail: detail,
             originName: original.originName,
             destinationName: original.destinationName,
+            destinationCode: original.destinationCode,
             departureTime: freshDepartureTime,
             arrivalTime: freshArrivalTime,
             departurePlatform: freshDepPlatform,
@@ -306,8 +309,7 @@ final class JourneyTracker {
 
             // If the train for this leg has an actual departure from the user's origin,
             // and hasn't arrived at the user's destination, the user is on this train
-            let destCode = journey.legs[index].service.destination.first?.crs
-                ?? journey.legs[index].service.destination.first?.tiploc ?? ""
+            let destCode = journey.legs[index].destinationCode
             let originStop = detail.stops.first { $0.crs == leg.service.stop.crs || $0.tiploc == leg.service.stop.tiploc }
             let destStop = detail.stops.last { $0.crs == destCode || $0.tiploc == destCode }
 
@@ -388,7 +390,8 @@ final class JourneyTracker {
             sendNotification(
                 title: "Journey Complete",
                 body: "Arrived at \(journey.legs.last?.destinationName ?? "destination")",
-                id: "journey-complete"
+                id: "journey-complete",
+                haptic: .success
             )
         }
     }
@@ -403,8 +406,7 @@ final class JourneyTracker {
             phase = "arrived"
         } else if let leg = leg, let detail {
             let originStop = detail.stops.first { $0.crs == leg.service.stop.crs || $0.tiploc == leg.service.stop.tiploc }
-            let destCode = journey.legs[index].service.destination.first?.crs
-                ?? journey.legs[index].service.destination.first?.tiploc ?? ""
+            let destCode = journey.legs[index].destinationCode
             let destStop = detail.stops.last { $0.crs == destCode || $0.tiploc == destCode }
 
             let hasDeparted = originStop?.departure?.actual != nil
@@ -433,8 +435,7 @@ final class JourneyTracker {
 
         if let leg, let detail {
             let originStop = detail.stops.first { $0.crs == leg.service.stop.crs || $0.tiploc == leg.service.stop.tiploc }
-            let destCode = journey.legs[index].service.destination.first?.crs
-                ?? journey.legs[index].service.destination.first?.tiploc ?? ""
+            let destCode = journey.legs[index].destinationCode
             let destStop = detail.stops.last { $0.crs == destCode || $0.tiploc == destCode }
             depPlatChanged = originStop?.platform?.changed ?? false
             arrPlatChanged = destStop?.platform?.changed ?? false
@@ -460,8 +461,7 @@ final class JourneyTracker {
 
         if let leg, let detail {
             let originStop = detail.stops.first { $0.crs == leg.service.stop.crs || $0.tiploc == leg.service.stop.tiploc }
-            let destCode = journey.legs[index].service.destination.first?.crs
-                ?? journey.legs[index].service.destination.first?.tiploc ?? ""
+            let destCode = journey.legs[index].destinationCode
             let destStop = detail.stops.last { $0.crs == destCode || $0.tiploc == destCode }
 
             // Scheduled = public or working time
@@ -515,8 +515,7 @@ final class JourneyTracker {
 
     private func isLegComplete(_ index: Int) -> Bool {
         guard let detail = legDetails[index] else { return false }
-        let destCode = journey.legs[index].service.destination.first?.crs
-            ?? journey.legs[index].service.destination.first?.tiploc ?? ""
+        let destCode = journey.legs[index].destinationCode
         let destStop = detail.stops.last { $0.crs == destCode || $0.tiploc == destCode }
         return destStop?.arrival?.actual != nil
     }
@@ -524,8 +523,7 @@ final class JourneyTracker {
     private func isJourneyComplete() -> Bool {
         guard let _ = updatedLegs.last,
               let detail = legDetails[updatedLegs.count - 1] else { return false }
-        let destCode = journey.legs.last?.service.destination.first?.crs
-            ?? journey.legs.last?.service.destination.first?.tiploc ?? ""
+        let destCode = journey.legs.last?.destinationCode ?? ""
         let destStop = detail.stops.last { $0.crs == destCode || $0.tiploc == destCode }
         return destStop?.arrival?.actual != nil
     }
@@ -595,18 +593,22 @@ final class JourneyTracker {
             sendNotification(
                 title: "Train Cancelled",
                 body: "\(headcode) from \(leg.originName) to \(leg.destinationName) has been cancelled",
-                id: "cancelled-\(legIndex)"
+                id: "cancelled-\(legIndex)",
+                haptic: .error
             )
         }
     }
 
-    private func sendNotification(title: String, body: String, id: String) {
+    private func sendNotification(title: String, body: String, id: String, haptic: UINotificationFeedbackGenerator.FeedbackType = .warning) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+
+        // Haptic feedback
+        UINotificationFeedbackGenerator().notificationOccurred(haptic)
     }
 
     // MARK: - Journey History
@@ -648,8 +650,7 @@ final class JourneyTracker {
     /// Observe push token updates for an activity and register with the backend.
     private func observePushToken(for activity: Activity<LegActivityAttributes>, legIndex: Int) {
         let leg = journey.legs[legIndex]
-        let destCode = leg.service.destination.first?.crs
-            ?? leg.service.destination.first?.tiploc ?? ""
+        let destCode = leg.destinationCode
 
         pushTokenTasks[legIndex] = Task { [weak self, apiClient] in
             for await tokenData in activity.pushTokenUpdates {
