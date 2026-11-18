@@ -35,4 +35,42 @@ extension TrainOperator {
         default: return .secondary
         }
     }
+
+    /// The name passengers use, short enough for one line on a board:
+    /// "SWR" rather than "South Western Railway".
+    var shortName: String {
+        switch code.uppercased() {
+        case "GW": return "GWR"
+        case "SW": return "SWR"
+        case "VT": return "Avanti"
+        case "XC": return "CrossCountry"
+        case "SE": return "Southeastern"
+        case "TL": return "Thameslink"
+        case "GN": return "Great Northern"
+        case "SN": return "Southern"
+        case "TP": return "TPE"
+        case "NT": return "Northern"
+        case "AW": return "TfW"
+        case "SR": return "ScotRail"
+        case "EM": return "EMR"
+        case "LM": return "WMR"
+        case "LN": return "LNR"
+        case "GR": return "LNER"
+        case "LE": return "Greater Anglia"
+        case "CC": return "c2c"
+        case "LO": return "Overground"
+        case "HX": return "Heathrow Express"
+        case "GX": return "Gatwick Express"
+        case "ME": return "Merseyrail"
+        case "CH": return "Chiltern"
+        case "GC": return "Grand Central"
+        case "LD": return "Lumo"
+        case "HT": return "Hull Trains"
+        case "CS": return "Caledonian Sleeper"
+        case "ES": return "Eurostar"
+        case "IL": return "Island Line"
+        case "XR": return "Elizabeth line"
+        default: return name
+        }
+    }
 }

@@ -81,10 +81,14 @@ extension EnvironmentValues {
 /// in the detail column of a split.
 struct DestinationLink<Label: View>: View {
     let destination: AppDestination
+    /// Whether a pushed row shows the usual chevron. Dense rows such as a
+    /// board's leave it out to give the text more room.
+    let showsChevron: Bool
     @ViewBuilder let label: () -> Label
 
-    init(_ destination: AppDestination, @ViewBuilder label: @escaping () -> Label) {
+    init(_ destination: AppDestination, showsChevron: Bool = true, @ViewBuilder label: @escaping () -> Label) {
         self.destination = destination
+        self.showsChevron = showsChevron
         self.label = label
     }
 
@@ -105,8 +109,17 @@ struct DestinationLink<Label: View>: View {
             .buttonStyle(.plain)
             .listRowBackground(isSelected ? Color.accentColor.opacity(0.15) : nil)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
-        } else {
+        } else if showsChevron {
             NavigationLink(value: destination, label: label)
+        } else {
+            // A List draws a chevron on every NavigationLink; a hidden link
+            // behind the row keeps the tap without it.
+            label()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    NavigationLink(value: destination) { EmptyView() }
+                        .opacity(0)
+                }
         }
     }
 }

@@ -41,16 +41,22 @@ struct BoardServiceRow: View {
             time
                 .frame(width: timeColumnWidth, alignment: .trailing)
 
-            // Platform
+            // Platform; badges keep their natural width
             PlatformBadge(platform: service.stop.platform)
+                .fixedSize()
 
             details
+                // The destination is what people scan for; it gets the
+                // room before anything else.
+                .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            // Status indicators
-            VStack(alignment: .trailing, spacing: 4) {
-                status
+            // Only what's unusual: on-time trains have no badge, and a
+            // delay already shows in the time.
+            if service.isCancelled {
+                StatusBadge(status: service.status, cancelled: true)
+                    .fixedSize()
             }
         }
     }
@@ -75,16 +81,26 @@ struct BoardServiceRow: View {
     private var status: some View {
         if service.isCancelled {
             StatusBadge(status: service.status, cancelled: true)
+        }
+    }
+
+    /// Where the train is, under its destination where there's room for it.
+    @ViewBuilder
+    private var progress: some View {
+        if service.isCancelled {
+            EmptyView()
         } else if service.stop.atPlatform == true {
             Label("At platform", systemImage: "tram.fill")
-                .font(.caption2)
-                .foregroundStyle(.blue)
+                .imageScale(.small)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(Color.platformConfirmed)
         } else if service.stop.approaching == true {
             Label("Approaching", systemImage: "arrow.right.circle.fill")
-                .font(.caption2)
-                .foregroundStyle(.orange)
-        } else if let delay = (service.stop.departure ?? service.stop.arrival)?.delayMinutes {
-            StatusBadge(status: service.status, delayMinutes: delay)
+                .imageScale(.small)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(Color.delayModerate)
         }
     }
 
@@ -95,6 +111,7 @@ struct BoardServiceRow: View {
                 .font(.body)
                 .fontWeight(.medium)
                 .strikethrough(service.isCancelled)
+                .lineLimit(2)
 
             HStack(spacing: 6) {
                 if let headcode = service.headcode {
@@ -108,17 +125,20 @@ struct BoardServiceRow: View {
                 }
 
                 if let op = service.operator {
-                    Text(op.name)
+                    Text(op.shortName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
+
+            progress
 
             // Cancel/late reason
             if let reason = service.cancelReason ?? service.lateReason {
                 Text(reason)
                     .font(.caption2)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.delaySevere)
                     .lineLimit(1)
             }
         }

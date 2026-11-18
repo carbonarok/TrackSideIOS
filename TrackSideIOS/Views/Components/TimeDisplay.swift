@@ -22,7 +22,7 @@ struct TimeDisplay: View {
                 // Cancelled: struck-through in red
                 Text(scheduled)
                     .strikethrough()
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.delaySevere)
             } else if isChanged {
                 // Delayed/changed: scheduled struck-through above, live time below
                 VStack(alignment: .trailing, spacing: 1) {
@@ -53,7 +53,7 @@ struct TimeDisplay: View {
                         Text("Late")
                             .font(.caption2)
                             .fontWeight(.bold)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.delayModerate)
                     }
                 }
             }
@@ -61,10 +61,8 @@ struct TimeDisplay: View {
     }
 
     private var delayColor: Color {
-        guard let delay = times?.delayMinutes else { return .orange }
-        if delay >= 10 { return .red }
-        if delay >= 5 { return .orange }
-        return .yellow
+        guard let delay = times?.delayMinutes else { return .delayModerate }
+        return .delay(minutes: delay)
     }
 
     /// Extract HH:MM from an ISO 8601 timestamp or short time string

@@ -277,7 +277,7 @@ struct Train {
         )
     }
 
-    static func times(_ date: Date) -> Times {
+    nonisolated static func times(_ date: Date) -> Times {
         Times(
             public: ISO8601DateFormatter().string(from: date),
             working: nil,

@@ -47,13 +47,11 @@ struct StatusBadge: View {
 
     private var statusColor: Color {
         if cancelled || status == .cancelled || status == .partiallyCancelled {
-            return .red
+            return .delaySevere
         }
         if let delay = delayMinutes {
             if delay <= 0 { return .green }
-            if delay < 5 { return .yellow }
-            if delay < 10 { return .orange }
-            return .red
+            return .delay(minutes: delay)
         }
         switch status {
         case .running: return .blue

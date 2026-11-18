@@ -17,6 +17,8 @@ struct DepartureBoardView: View {
     @AppStorage("lastStationName") private var lastStationName = ""
     @State private var callingAtFilter = ""
     @State private var showCallingAtSearch = false
+    @State private var showMessages = false
+    @FocusState private var callingAtFocused: Bool
 
     private let apiClient = APIClient()
 
@@ -63,9 +65,27 @@ struct DepartureBoardView: View {
                 }
             }
             if selectedStation != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    filterButton
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     favouriteButton
                 }
+            }
+        }
+        // Finding a train by headcode, in the standard search bar rather
+        // than a row above the board.
+        .searchable(text: $serviceQuery, prompt: "Find a train by headcode")
+        .textInputAutocapitalization(.characters)
+        .autocorrectionDisabled()
+        .onSubmit(of: .search) {
+            searchServices()
+        }
+        .onChange(of: serviceQuery) { _, newValue in
+            if newValue.count >= 3 {
+                searchServices()
+            } else if newValue.isEmpty {
+                serviceResults = []
             }
         }
         .sheet(isPresented: $showingSearch) {
@@ -91,7 +111,7 @@ struct DepartureBoardView: View {
 
     @ViewBuilder
     private var noStationView: some View {
-        if favourites.isEmpty {
+        if favourites.isEmpty && serviceResults.isEmpty {
             ContentUnavailableView {
                 Label("No Station Selected", systemImage: "train.side.front.car")
             } description: {
@@ -103,11 +123,16 @@ struct DepartureBoardView: View {
             }
         } else {
             List {
-                // Service search
-                Section {
-                    serviceSearchBar
-                } header: {
-                    Text("Search by Headcode")
+                if isSearchingServices && serviceResults.isEmpty {
+                    Section {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Searching…")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 if !serviceResults.isEmpty {
@@ -196,7 +221,6 @@ struct DepartureBoardView: View {
                 }
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
 
             // Cached data banner
@@ -223,9 +247,16 @@ struct DepartureBoardView: View {
                 }
             }
 
-            // Service search
-            Section {
-                serviceSearchBar
+            if isSearchingServices && serviceResults.isEmpty {
+                Section {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Searching…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             if !serviceResults.isEmpty {
@@ -240,15 +271,16 @@ struct DepartureBoardView: View {
                 }
             }
 
-            // Calling at filter
-            Section {
-                if showCallingAtSearch {
+            // Calling at filter, opened from the toolbar
+            if showCallingAtSearch {
+                Section {
                     HStack {
                         Image(systemName: "line.3.horizontal.decrease")
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(.tint)
                         TextField("Calling at station code (e.g. RDG)", text: $callingAtFilter)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
+                            .focused($callingAtFocused)
                         if !callingAtFilter.isEmpty {
                             Button {
                                 callingAtFilter = ""
@@ -257,46 +289,28 @@ struct DepartureBoardView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.borderless)
+                            .accessibilityLabel("Clear filter")
                         }
-                        Button {
-                            showCallingAtSearch = false
-                            callingAtFilter = ""
-                        } label: {
-                            Text("Done")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                } else {
-                    Button {
-                        showCallingAtSearch = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "line.3.horizontal.decrease")
-                            Text("Filter by calling point")
-                                .font(.subheadline)
-                            Spacer()
-                        }
-                        .foregroundStyle(.secondary)
                     }
                 }
             }
 
-            // Station messages
+            // Station messages, folded into one line until opened
             if !board.messages.isEmpty {
                 Section {
-                    ForEach(board.messages) { message in
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: messageSeverityIcon(message.severity))
-                                .foregroundStyle(messageSeverityColor(message.severity))
-                                .padding(.top, 2)
-                            Text(message.text)
-                                .font(.caption)
+                    messagesSummary(board.messages)
+                    if showMessages {
+                        ForEach(board.messages) { message in
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: messageSeverityIcon(message.severity))
+                                    .foregroundStyle(messageSeverityColor(message.severity))
+                                    .padding(.top, 2)
+                                Text(message.text)
+                                    .font(.caption)
+                            }
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
                     }
-                } header: {
-                    Label("Station Messages", systemImage: "exclamationmark.bubble")
                 }
             }
 
@@ -304,7 +318,7 @@ struct DepartureBoardView: View {
             Section {
                 let filtered = filteredServices(board.services)
                 ForEach(filtered) { service in
-                    DestinationLink(.service(ServiceRoute(uid: service.uid, runDate: service.runDate))) {
+                    DestinationLink(.service(ServiceRoute(uid: service.uid, runDate: service.runDate)), showsChevron: false) {
                         BoardServiceRow(service: service)
                     }
                 }
@@ -324,40 +338,62 @@ struct DepartureBoardView: View {
         }
     }
 
-    // MARK: - Service Search
+    // MARK: - Station Messages
 
-    @ViewBuilder
-    private var serviceSearchBar: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search headcode (e.g. 1C45)", text: $serviceQuery)
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-                .onSubmit {
-                    searchServices()
+    /// One line for all of a station's messages: the most serious one's
+    /// icon, how many there are, and the start of the most serious.
+    private func messagesSummary(_ messages: [StationMessage]) -> some View {
+        let worst = messages.max { $0.severity < $1.severity }!
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) { showMessages.toggle() }
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: messageSeverityIcon(worst.severity))
+                    .foregroundStyle(messageSeverityColor(worst.severity))
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(messages.count == 1 ? "1 station message" : "\(messages.count) station messages")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    if !showMessages {
+                        Text(worst.text)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
-            if !serviceQuery.isEmpty {
-                Button {
-                    serviceQuery = ""
-                    serviceResults = []
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.borderless)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(showMessages ? 180 : 0))
+                    .padding(.top, 4)
             }
-            if isSearchingServices {
-                ProgressView()
-                    .controlSize(.small)
-            }
+            .contentShape(Rectangle())
         }
-        .onChange(of: serviceQuery) { _, newValue in
-            if newValue.count >= 3 {
-                searchServices()
-            } else if newValue.isEmpty {
-                serviceResults = []
+        .buttonStyle(.plain)
+        .accessibilityHint(showMessages ? "Hides the messages" : "Shows the messages")
+    }
+
+    // MARK: - Calling Point Filter
+
+    private var filterButton: some View {
+        let active = showCallingAtSearch || !callingAtFilter.isEmpty
+        return Button {
+            withAnimation {
+                if active {
+                    showCallingAtSearch = false
+                    callingAtFilter = ""
+                } else {
+                    showCallingAtSearch = true
+                    callingAtFocused = true
+                }
             }
+        } label: {
+            Label(
+                active ? "Stop filtering" : "Filter by calling point",
+                systemImage: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
+            )
         }
     }
 

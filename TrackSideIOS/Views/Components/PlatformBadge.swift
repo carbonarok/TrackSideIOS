@@ -34,10 +34,10 @@ struct PlatformBadge: View {
 
     private var foregroundColor: Color {
         if platform?.changed == true {
-            return .orange
+            return .delayModerate
         }
         if platform?.confirmed == true {
-            return .blue
+            return .platformConfirmed
         }
         return .primary
     }
