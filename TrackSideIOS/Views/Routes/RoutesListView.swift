@@ -24,7 +24,7 @@ struct RoutesListView: View {
             } else {
                 List {
                     ForEach(routes) { route in
-                        NavigationLink(value: route) {
+                        DestinationLink(.route(route)) {
                             routeRow(route)
                         }
                         .swipeActions(edge: .trailing) {

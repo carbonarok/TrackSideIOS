@@ -295,7 +295,7 @@ struct RouteDetailView: View {
                     connectionSummary(minutes: connectionMins, stationName: leg.originName)
                 }
 
-                NavigationLink(value: ServiceRoute(uid: leg.service.uid, runDate: leg.service.runDate)) {
+                NavigationLink(value: AppDestination.service(ServiceRoute(uid: leg.service.uid, runDate: leg.service.runDate))) {
                     legSummaryRow(leg)
                 }
 

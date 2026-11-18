@@ -113,7 +113,7 @@ struct DepartureBoardView: View {
                 if !serviceResults.isEmpty {
                     Section {
                         ForEach(serviceResults, id: \.id) { service in
-                            NavigationLink(value: service) {
+                            DestinationLink(.service(ServiceRoute(uid: service.uid, runDate: service.runDate))) {
                                 serviceResultRow(service)
                             }
                         }
@@ -179,9 +179,6 @@ struct DepartureBoardView: View {
                 }
             }
             .listStyle(.plain)
-            .navigationDestination(for: ServiceSummary.self) { service in
-                ServiceDetailView(uid: service.uid, runDate: service.runDate, liveClient: liveClient)
-            }
         }
     }
 
@@ -234,7 +231,7 @@ struct DepartureBoardView: View {
             if !serviceResults.isEmpty {
                 Section {
                     ForEach(serviceResults, id: \.id) { service in
-                        NavigationLink(value: service) {
+                        DestinationLink(.service(ServiceRoute(uid: service.uid, runDate: service.runDate))) {
                             serviceResultRow(service)
                         }
                     }
@@ -307,7 +304,7 @@ struct DepartureBoardView: View {
             Section {
                 let filtered = filteredServices(board.services)
                 ForEach(filtered) { service in
-                    NavigationLink(value: service) {
+                    DestinationLink(.service(ServiceRoute(uid: service.uid, runDate: service.runDate))) {
                         BoardServiceRow(service: service)
                     }
                 }
@@ -321,16 +318,6 @@ struct DepartureBoardView: View {
             }
         }
         .listStyle(.plain)
-        .navigationDestination(for: BoardService.self) { service in
-            ServiceDetailView(
-                uid: service.uid,
-                runDate: service.runDate,
-                liveClient: liveClient
-            )
-        }
-        .navigationDestination(for: ServiceSummary.self) { service in
-            ServiceDetailView(uid: service.uid, runDate: service.runDate, liveClient: liveClient)
-        }
         .onChange(of: boardService.mode) { _, newMode in
             guard let code = selectedStation?.displayCode else { return }
             Task { await boardService.loadBoard(for: code, mode: newMode) }
