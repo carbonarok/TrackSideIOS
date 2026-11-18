@@ -1,6 +1,6 @@
 import Foundation
 
-enum ServiceStatus: String, Codable, Sendable {
+nonisolated enum ServiceStatus: String, Codable, Sendable {
     case scheduled
     case activated
     case running
@@ -10,7 +10,7 @@ enum ServiceStatus: String, Codable, Sendable {
 }
 
 /// Summary of a service, used in boards and search results
-struct ServiceSummary: Codable, Sendable, Hashable, Identifiable {
+nonisolated struct ServiceSummary: Codable, Sendable, Hashable, Identifiable {
     let uid: String
     let runDate: String
     let headcode: String?
@@ -41,7 +41,7 @@ struct ServiceSummary: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// A service on a departure/arrival board (ServiceSummary fields flattened + stop)
-struct BoardService: Codable, Sendable, Hashable, Identifiable {
+nonisolated struct BoardService: Codable, Sendable, Hashable, Identifiable {
     let uid: String
     let runDate: String
     let headcode: String?
@@ -73,14 +73,14 @@ struct BoardService: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// Train Describer position
-struct Position: Codable, Sendable, Hashable {
+nonisolated struct Position: Codable, Sendable, Hashable {
     let tdArea: String
     let berth: String
     let at: String
 }
 
 /// Association between services (join/divide/next working)
-struct Association: Codable, Sendable, Hashable {
+nonisolated struct Association: Codable, Sendable, Hashable {
     let type: String
     let category: String
     let location: Location
@@ -89,7 +89,7 @@ struct Association: Codable, Sendable, Hashable {
 }
 
 /// Full detail of a service including all stops
-struct ServiceDetail: Codable, Sendable, Hashable, Identifiable {
+nonisolated struct ServiceDetail: Codable, Sendable, Hashable, Identifiable {
     let uid: String
     let runDate: String
     let headcode: String?
@@ -127,6 +127,6 @@ struct ServiceDetail: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// Response wrapper for service search
-struct ServiceSearchResponse: Codable, Sendable {
+nonisolated struct ServiceSearchResponse: Codable, Sendable {
     let services: [ServiceSummary]
 }

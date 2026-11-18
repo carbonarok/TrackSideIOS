@@ -23,7 +23,8 @@ struct RouteDetailView: View {
             journeyControls
 
             // Content
-            if calculator.isCalculating {
+            // While refreshing, keep showing the journeys already found.
+            if calculator.isCalculating && calculator.journeys.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
                     ProgressView()

@@ -1,6 +1,6 @@
 import Foundation
 
-enum APIError: Error, LocalizedError {
+nonisolated enum APIError: Error, LocalizedError {
     case invalidURL
     case notConfigured
     case httpError(statusCode: Int, message: String)
@@ -125,7 +125,11 @@ struct APIClient {
 
     // MARK: - Generic Fetch
 
-    private func fetch<T: Decodable>(_ request: URLRequest) async throws -> T {
+    /// Fetches and decodes off the main thread. A busy board is tens of
+    /// kilobytes of JSON and refreshes every few seconds; decoding it on the
+    /// main thread makes scrolling stutter.
+    @concurrent
+    private nonisolated static func fetch<T: Decodable & Sendable>(_ request: URLRequest) async throws -> T {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw APIError.networkError("Invalid response")
@@ -135,10 +139,13 @@ struct APIClient {
             throw APIError.httpError(statusCode: http.statusCode, message: body)
         }
         do {
-            let decoder = JSONDecoder()
-            return try decoder.decode(T.self, from: data)
+            return try JSONDecoder().decode(T.self, from: data)
         } catch {
             throw APIError.decodingError(error.localizedDescription)
         }
+    }
+
+    private func fetch<T: Decodable & Sendable>(_ request: URLRequest) async throws -> T {
+        try await Self.fetch(request)
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-struct TrainOperator: Codable, Sendable, Hashable {
+nonisolated struct TrainOperator: Codable, Sendable, Hashable {
     let code: String
     let name: String
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-enum StopKind: String, Codable, Sendable {
+nonisolated enum StopKind: String, Codable, Sendable {
     case origin
     case call
     case pass
@@ -8,7 +8,7 @@ enum StopKind: String, Codable, Sendable {
     case stop
 }
 
-struct Times: Codable, Sendable, Hashable {
+nonisolated struct Times: Codable, Sendable, Hashable {
     let `public`: String?
     let working: String?
     let actual: String?
@@ -28,7 +28,7 @@ struct Times: Codable, Sendable, Hashable {
     }
 }
 
-struct Platform: Codable, Sendable, Hashable {
+nonisolated struct Platform: Codable, Sendable, Hashable {
     let planned: String?
     let actual: String?
     let changed: Bool
@@ -41,7 +41,7 @@ struct Platform: Codable, Sendable, Hashable {
 }
 
 /// A calling point. Location fields are flattened (OpenAPI allOf).
-struct Stop: Codable, Sendable, Hashable, Identifiable {
+nonisolated struct Stop: Codable, Sendable, Hashable, Identifiable {
     let tiploc: String
     let crs: String?
     let name: String

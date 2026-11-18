@@ -1,6 +1,6 @@
 import Foundation
 
-struct Location: Codable, Sendable, Hashable, Identifiable {
+nonisolated struct Location: Codable, Sendable, Hashable, Identifiable {
     let tiploc: String
     let crs: String?
     let name: String
@@ -10,13 +10,13 @@ struct Location: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// An origin or destination with a time (allOf Location + time)
-struct Endpoint: Codable, Sendable, Hashable {
+nonisolated struct Endpoint: Codable, Sendable, Hashable {
     let tiploc: String
     let crs: String?
     let name: String
     let time: String?
 }
 
-struct LocationSearchResponse: Codable, Sendable {
+nonisolated struct LocationSearchResponse: Codable, Sendable {
     let locations: [Location]
 }

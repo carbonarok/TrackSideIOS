@@ -12,6 +12,9 @@ actor LiveClient {
     /// Generation counter to prevent stale receive loops from triggering reconnects
     /// after the connection has already been replaced.
     private var connectionGeneration: Int = 0
+    /// One session for every connection; a new one each reconnect was never
+    /// released.
+    private let session = URLSession(configuration: .default)
 
     /// Register a handler that is called when subscribed topics change.
     /// Returns an ID to remove the handler later.
@@ -88,7 +91,6 @@ actor LiveClient {
         let gen = connectionGeneration
         var request = URLRequest(url: server.webSocketURL)
         server.authorize(&request)
-        let session = URLSession(configuration: .default)
         webSocketTask = session.webSocketTask(with: request)
         webSocketTask?.resume()
         isConnected = true

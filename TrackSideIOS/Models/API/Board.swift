@@ -1,7 +1,7 @@
 import Foundation
 
 /// Darwin station message
-struct StationMessage: Codable, Sendable, Hashable, Identifiable {
+nonisolated struct StationMessage: Codable, Sendable, Hashable, Identifiable {
     let id: Int
     let category: String
     let severity: Int
@@ -11,7 +11,7 @@ struct StationMessage: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// A departure or arrival board for a station
-struct Board: Codable, Sendable {
+nonisolated struct Board: Codable, Sendable {
     let location: Location
     let from: String
     let to: String
