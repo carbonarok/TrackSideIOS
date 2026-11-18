@@ -11,6 +11,8 @@ struct LegEditorView: View {
     var onSearchOrigin: () -> Void
     var onSearchDestination: () -> Void
 
+    /// Grows with the text size, so the field stays wide enough to type in.
+    @ScaledMetric(relativeTo: .body) private var platformFieldWidth: CGFloat = 100
     @State private var newDepPlatform = ""
     @State private var newArrPlatform = ""
 
@@ -112,7 +114,7 @@ struct LegEditorView: View {
                 TextField("Add platform", text: newPlatform)
                     .keyboardType(.numberPad)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 100)
+                    .frame(width: platformFieldWidth)
 
                 Button("Add") {
                     let trimmed = newPlatform.wrappedValue.trimmingCharacters(in: .whitespaces)

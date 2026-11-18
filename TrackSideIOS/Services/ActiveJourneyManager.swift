@@ -1,5 +1,7 @@
 import Foundation
+import os
 import ActivityKit
+import os
 import SwiftData
 import Observation
 import BackgroundTasks
@@ -59,7 +61,7 @@ final class ActiveJourneyManager {
     func handleForegroundTransition() async {
         await liveClient.ensureConnected()
         if let tracker, tracker.isTracking {
-            print("[ActiveJourneyManager] Refreshing tracker after foreground transition")
+            Log.tracking.info("Refreshing tracker after foreground transition")
             await tracker.refreshAfterReconnect()
         }
     }
@@ -88,7 +90,7 @@ final class ActiveJourneyManager {
 
         let total = legActivities.count + journeyActivities.count + trainActivities.count
         if total > 0 {
-            print("[ActiveJourneyManager] Cleaning up \(total) stale activities")
+            Log.tracking.info("Cleaning up \(String(describing: total), privacy: .public) stale activities")
         }
 
         for activity in legActivities {

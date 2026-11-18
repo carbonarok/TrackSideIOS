@@ -1,5 +1,7 @@
 import Foundation
+import os
 import ActivityKit
+import os
 import UserNotifications
 import SwiftData
 import Observation
@@ -116,7 +118,7 @@ final class JourneyTracker {
                     observeActivityState(for: activity, legIndex: index)
                 } catch {
                     // Push not available (e.g. personal dev team) — start without it
-                    print("[JourneyTracker] Push token not available, starting without: \(error.localizedDescription)")
+                    Log.tracking.error("Push token not available, starting without: \(String(describing: error.localizedDescription), privacy: .public)")
                     activity = try Activity.request(
                         attributes: attributes,
                         content: content,
@@ -124,9 +126,9 @@ final class JourneyTracker {
                     )
                 }
                 legActivities[index] = activity
-                print("[JourneyTracker] Started activity for leg \(index): \(headcode)")
+                Log.tracking.info("Started activity for leg \(String(describing: index), privacy: .public): \(String(describing: headcode), privacy: .public)")
             } catch {
-                print("[JourneyTracker] Failed to start activity for leg \(index): \(error)")
+                Log.tracking.error("Failed to start activity for leg \(String(describing: index), privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
 
@@ -140,14 +142,14 @@ final class JourneyTracker {
         if !pushAvailable {
             startFallbackPolling()
         } else {
-            print("[JourneyTracker] Push available — skipping fallback polling")
+            Log.tracking.info("Push available — skipping fallback polling")
         }
     }
 
     /// Re-subscribe and refresh all data after a WebSocket reconnect (e.g. foreground transition).
     func refreshAfterReconnect() async {
         guard isTracking else { return }
-        print("[JourneyTracker] Refreshing after reconnect")
+        Log.tracking.info("Refreshing after reconnect")
         await refreshAllLegs()
     }
 
@@ -200,14 +202,14 @@ final class JourneyTracker {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled, let self else { return }
-                print("[JourneyTracker] Fallback poll — refreshing all legs")
+                Log.tracking.info("Fallback poll — refreshing all legs")
                 await self.refreshAllLegs()
             }
         }
     }
 
     private func handleChanges(topics: Set<String>) async {
-        print("[JourneyTracker] WebSocket change for: \(topics.joined(separator: ", "))")
+        Log.tracking.debug("WebSocket change for: \(String(describing: topics.joined(separator: ", ")), privacy: .public)")
         for topic in topics {
             guard let legIndex = topicToLegIndex[topic] else { continue }
             let leg = journey.legs[legIndex]
@@ -219,9 +221,9 @@ final class JourneyTracker {
                 legDetails[legIndex] = detail
                 updateLeg(at: legIndex, with: detail)
                 checkForAlerts(legIndex: legIndex)
-                print("[JourneyTracker] Updated leg \(legIndex) — status: \(detail.status.rawValue)")
+                Log.tracking.debug("Updated leg \(String(describing: legIndex), privacy: .public) — status: \(String(describing: detail.status.rawValue), privacy: .public)")
             } catch {
-                print("[JourneyTracker] Failed to refresh leg \(legIndex): \(error)")
+                Log.tracking.error("Failed to refresh leg \(String(describing: legIndex), privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
         determineCurrentLeg()
@@ -229,7 +231,7 @@ final class JourneyTracker {
     }
 
     private func refreshAllLegs() async {
-        print("[JourneyTracker] Refreshing all \(journey.legs.count) leg(s)")
+        Log.tracking.debug("Refreshing all \(String(describing: self.journey.legs.count), privacy: .public) leg(s)")
         await withTaskGroup(of: (Int, ServiceDetail?).self) { group in
             for (index, leg) in journey.legs.enumerated() {
                 group.addTask { [apiClient] in
@@ -249,7 +251,7 @@ final class JourneyTracker {
             }
         }
         determineCurrentLeg()
-        print("[JourneyTracker] Current leg: \(currentLegIndex), phase will be determined by activity state")
+        Log.tracking.debug("Current leg: \(String(describing: self.currentLegIndex), privacy: .public), phase will be determined by activity state")
         await updateActivities()
     }
 
@@ -364,7 +366,7 @@ final class JourneyTracker {
             }
 
             let content = ActivityContent(state: state, staleDate: staleDate)
-            print("[JourneyTracker] Updating leg \(index) activity — phase: \(state.phase)")
+            Log.tracking.debug("Updating leg \(String(describing: index), privacy: .public) activity — phase: \(String(describing: state.phase), privacy: .public)")
             await activity.update(content)
 
             // End individual leg activity when that leg arrives
@@ -376,7 +378,7 @@ final class JourneyTracker {
                 stateTasks[index]?.cancel()
                 stateTasks[index] = nil
                 legActivities[index] = nil
-                print("[JourneyTracker] Ended activity for leg \(index)")
+                Log.tracking.info("Ended activity for leg \(String(describing: index), privacy: .public)")
             }
         }
 
@@ -656,7 +658,7 @@ final class JourneyTracker {
             for await tokenData in activity.pushTokenUpdates {
                 guard !Task.isCancelled else { return }
                 let hexToken = tokenData.map { String(format: "%02x", $0) }.joined()
-                print("[JourneyTracker] Push token for leg \(legIndex): \(hexToken.prefix(16))...")
+                Log.tracking.debug("Push token for leg \(String(describing: legIndex), privacy: .public): \(String(describing: hexToken.prefix(16)), privacy: .private)...")
 
                 let state = await MainActor.run { self?.buildLegState(for: legIndex) }
 
@@ -699,7 +701,7 @@ final class JourneyTracker {
             for await activityState in activity.activityStateUpdates {
                 guard !Task.isCancelled else { return }
                 if activityState == .dismissed || activityState == .ended {
-                    print("[JourneyTracker] Activity for leg \(legIndex) was dismissed/ended by user")
+                    Log.tracking.info("Activity for leg \(String(describing: legIndex), privacy: .public) was dismissed/ended by user")
                     await apiClient.deregisterActivity(activityID: activity.id)
                     return
                 }
@@ -718,16 +720,16 @@ final class JourneyTracker {
         request.earliestBeginDate = Date(timeIntervalSinceNow: 5 * 60)
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("[JourneyTracker] Scheduled background refresh")
+            Log.tracking.info("Scheduled background refresh")
         } catch {
-            print("[JourneyTracker] Failed to schedule background refresh: \(error)")
+            Log.tracking.error("Failed to schedule background refresh: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     /// Called from the app's background task handler.
     func performBackgroundRefresh() async {
         guard isTracking else { return }
-        print("[JourneyTracker] Performing background refresh")
+        Log.tracking.info("Performing background refresh")
         await liveClient.ensureConnected()
         await refreshAllLegs()
     }

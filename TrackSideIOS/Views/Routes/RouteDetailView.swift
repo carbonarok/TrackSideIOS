@@ -11,6 +11,8 @@ struct RouteDetailView: View {
     @State private var showTimePicker = false
     @State private var expandedJourneyID: UUID?
     @State private var trackingError: String?
+    /// Grows with the text size, so times don't get cut off.
+    @ScaledMetric(relativeTo: .title3) private var journeyTimeWidth: CGFloat = 80
 
     /// The active tracker for this route (nil if not tracking this route)
     private var activeTracker: JourneyTracker? {
@@ -177,6 +179,30 @@ struct RouteDetailView: View {
                 }
             }
 
+            // Journeys saved from an earlier visit, on screen until fresh ones arrive.
+            if let savedAt = calculator.showingSavedFrom {
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Saved journeys from \(savedAt, format: .dateTime.hour().minute())")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                            Text(calculator.updateFailure.map { "Couldn't update: \($0)" } ?? "Times may have changed since")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if calculator.isCalculating {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
             ForEach(calculator.journeys, id: \.id) { journey in
                 Section {
                     journeyCard(journey)
@@ -222,7 +248,7 @@ struct RouteDetailView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                .frame(width: 80, alignment: .leading)
+                .frame(width: journeyTimeWidth, alignment: .leading)
 
                 // Arrow + duration
                 VStack(spacing: 2) {
@@ -259,7 +285,7 @@ struct RouteDetailView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                .frame(width: 80, alignment: .trailing)
+                .frame(width: journeyTimeWidth, alignment: .trailing)
 
                 Spacer().frame(width: 8)
 

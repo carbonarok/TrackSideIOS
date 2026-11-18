@@ -21,6 +21,9 @@ struct StationEntityQuery: EntityStringQuery {
         identifiers.map { StationEntity(id: $0, name: $0) }
     }
 
+    // The API client belongs to the main actor; App Intents call these
+    // from anywhere, so they hop there first.
+    @MainActor
     func entities(matching string: String) async throws -> [StationEntity] {
         let client = APIClient()
         let locations = try await client.searchLocations(query: string)
@@ -60,6 +63,7 @@ struct NextDepartureIntent: AppIntent {
     @Parameter(title: "Destination (optional)", description: "Filter by destination station code")
     var destinationCode: String?
 
+    @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let code = station.id
         let client = APIClient()
@@ -144,6 +148,7 @@ struct CheckDelaysIntent: AppIntent {
     @Parameter(title: "Station")
     var station: StationEntity
 
+    @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let code = station.id
         let client = APIClient()

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct StopRow: View {
+    /// Grows with the text size, so times don't get cut off.
+    @ScaledMetric(relativeTo: .subheadline) private var timeColumnWidth: CGFloat = 80
     let stop: Stop
     let isCurrentPosition: Bool
     let isFirst: Bool
@@ -15,24 +17,39 @@ struct StopRow: View {
         self.isPassed = isPassed
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             // Timeline indicator with connecting lines
             timelineIndicator
 
-            // Times column — single relevant time per stop
-            timeColumn
-                .font(.subheadline)
-                .monospacedDigit()
-                .frame(width: 80, alignment: .trailing)
+            if dynamicTypeSize.isAccessibilitySize {
+                // No room for columns at the largest sizes: time above the
+                // station, each the full width.
+                VStack(alignment: .leading, spacing: 4) {
+                    timeColumn
+                        .font(.subheadline)
+                        .monospacedDigit()
+                    stationInfo
+                    trailingIndicator
+                }
+                Spacer(minLength: 0)
+            } else {
+                // Times column — single relevant time per stop
+                timeColumn
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .frame(width: timeColumnWidth, alignment: .trailing)
 
-            // Station info
-            stationInfo
+                // Station info
+                stationInfo
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            // Status indicator on the right
-            trailingIndicator
+                // Status indicator on the right
+                trailingIndicator
+            }
         }
         .padding(.vertical, 4)
         .opacity(stop.cancelled ? 0.5 : 1.0)

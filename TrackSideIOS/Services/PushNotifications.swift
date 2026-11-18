@@ -1,5 +1,7 @@
 import UIKit
+import os
 import UserNotifications
+import os
 
 /// The device's own APNs token, for normal notifications from the server.
 /// (A Live Activity's push token is separate and can't show a notification.)
@@ -8,7 +10,7 @@ enum PushDeviceToken {
 
     static func set(_ token: Data) {
         hex = token.map { String(format: "%02x", $0) }.joined()
-        print("[Push] Device token: \(hex?.prefix(16) ?? "")...")
+        Log.push.info("Device token: \(String(describing: hex?.prefix(16) ?? ""), privacy: .private)...")
     }
 
     /// The token, waiting up to `timeout` for iOS to hand it over at launch.
@@ -37,7 +39,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("[Push] Remote notification registration failed: \(error.localizedDescription)")
+        Log.push.error("Remote notification registration failed: \(String(describing: error.localizedDescription), privacy: .public)")
     }
 
     /// Platform changes and delays should show even with the app on screen.

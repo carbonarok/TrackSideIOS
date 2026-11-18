@@ -1,5 +1,7 @@
 import Foundation
+import os
 import Security
+import os
 
 // Compiled into both the app and the widgets extension, so both talk to the
 // server chosen in Settings → Server.
@@ -128,7 +130,7 @@ nonisolated enum ServerSettings {
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         let status = SecItemAdd(item as CFDictionary, nil)
         if status != errSecSuccess {
-            print("[ServerSettings] Saving the API key failed: \(status)")
+            Log.settings.error("Saving the API key failed: \(String(describing: status), privacy: .public)")
         }
     }
 }

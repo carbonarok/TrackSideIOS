@@ -1,5 +1,7 @@
 import SwiftUI
+import os
 import SwiftData
+import os
 
 /// Lightweight identifier for navigating to a service detail view
 struct ServiceRoute: Hashable, Identifiable {
@@ -84,7 +86,7 @@ struct ContentView: View {
             journeyManager.onJourneyComplete = { [modelContext] record in
                 modelContext.insert(record)
                 try? modelContext.save()
-                print("[ContentView] Saved journey record: \(record.routeName)")
+                Log.app.info("Saved journey record: \(String(describing: record.routeName), privacy: .public)")
             }
         }
     }

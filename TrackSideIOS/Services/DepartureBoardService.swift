@@ -1,5 +1,7 @@
 import Foundation
+import os
 import Observation
+import os
 
 nonisolated enum BoardMode: String, CaseIterable, Sendable {
     case departures = "Departures"
@@ -127,7 +129,7 @@ final class DepartureBoardService {
             let data = try JSONEncoder().encode(board)
             try data.write(to: url, options: .atomic)
         } catch {
-            print("[BoardCache] Failed to cache: \(error)")
+            Log.boards.error("Failed to cache: \(error.localizedDescription, privacy: .public)")
         }
     }
 

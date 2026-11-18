@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 nonisolated enum APIError: Error, LocalizedError {
     case invalidURL
@@ -100,12 +101,12 @@ struct APIClient {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await Self.session.data(for: request)
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            print("[APIClient] POST /v1/activities/register → \(code)")
+            Log.network.info("POST /v1/activities/register → \(String(describing: code), privacy: .public)")
             return code
         } catch {
-            print("[APIClient] registerActivity failed: \(error)")
+            Log.network.error("registerActivity failed: \(error.localizedDescription, privacy: .public)")
             return 0
         }
     }
@@ -115,22 +116,52 @@ struct APIClient {
         do {
             var request = try server().request("v1/activities/\(activityID)")
             request.httpMethod = "DELETE"
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await Self.session.data(for: request)
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            print("[APIClient] DELETE /v1/activities/\(activityID) → \(code)")
+            Log.network.info("DELETE /v1/activities/\(String(describing: activityID), privacy: .public) → \(String(describing: code), privacy: .public)")
         } catch {
-            print("[APIClient] deregisterActivity failed: \(error)")
+            Log.network.error("deregisterActivity failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     // MARK: - Generic Fetch
 
+    /// Gives up on a request after 15 seconds without data, not the
+    /// default 60, so a dead connection on a train shows an error rather
+    /// than a spinner for a minute.
+    private nonisolated static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 30
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Waits before each retry of a request that failed in passing.
+    private nonisolated static let retryDelays: [Duration] = [.milliseconds(500), .milliseconds(1500)]
+
     /// Fetches and decodes off the main thread. A busy board is tens of
     /// kilobytes of JSON and refreshes every few seconds; decoding it on the
     /// main thread makes scrolling stutter.
+    ///
+    /// Every fetch is a GET, so one that fails in passing (a dropped
+    /// connection, a gateway error while the server restarts) is tried
+    /// again, twice.
     @concurrent
     private nonisolated static func fetch<T: Decodable & Sendable>(_ request: URLRequest) async throws -> T {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        var attempt = 0
+        while true {
+            do {
+                return try await fetchOnce(request)
+            } catch where attempt < retryDelays.count && isTransient(error) && !Task.isCancelled {
+                Log.network.info("Retrying \(request.url?.path ?? "", privacy: .public) after: \(error.localizedDescription, privacy: .public)")
+                try await Task.sleep(for: retryDelays[attempt])
+                attempt += 1
+            }
+        }
+    }
+
+    private nonisolated static func fetchOnce<T: Decodable & Sendable>(_ request: URLRequest) async throws -> T {
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw APIError.networkError("Invalid response")
         }
@@ -142,6 +173,20 @@ struct APIClient {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
             throw APIError.decodingError(error.localizedDescription)
+        }
+    }
+
+    /// Whether trying again soon might work.
+    nonisolated static func isTransient(_ error: Error) -> Bool {
+        if let apiError = error as? APIError, case .httpError(let status, _) = apiError {
+            return [502, 503, 504].contains(status)
+        }
+        guard let urlError = error as? URLError else { return false }
+        switch urlError.code {
+        case .timedOut, .networkConnectionLost, .cannotConnectToHost, .dnsLookupFailed, .cannotFindHost, .notConnectedToInternet:
+            return true
+        default:
+            return false
         }
     }
 
