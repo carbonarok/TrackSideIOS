@@ -313,6 +313,7 @@ struct RouteDetailView: View {
             } // inner HStack
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("journeyCard")
 
         // Expanded content — full journey details
         if isExpanded {
@@ -325,6 +326,7 @@ struct RouteDetailView: View {
                 NavigationLink(value: AppDestination.service(ServiceRoute(uid: leg.service.uid, runDate: leg.service.runDate))) {
                     legSummaryRow(leg)
                 }
+                .accessibilityIdentifier("journeyLeg")
 
             }
 

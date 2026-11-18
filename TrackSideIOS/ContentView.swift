@@ -83,6 +83,9 @@ struct ContentView: View {
             .interactiveDismissDisabled()
         }
         .task {
+            #if DEBUG
+            seedRouteForUITests()
+            #endif
             journeyManager.onJourneyComplete = { [modelContext] record in
                 modelContext.insert(record)
                 try? modelContext.save()
@@ -90,6 +93,17 @@ struct ContentView: View {
             }
         }
     }
+
+    #if DEBUG
+    /// UI tests launch with `-UITestSeedRoute` to start with one route, so
+    /// they can test the route screens without typing one in.
+    private func seedRouteForUITests() {
+        guard ProcessInfo.processInfo.arguments.contains("-UITestSeedRoute"), routes.isEmpty else { return }
+        let leg = SavedLeg(order: 0, originCode: "CLJ", originName: "Clapham Junction", destinationCode: "WOK", destinationName: "Woking")
+        modelContext.insert(SavedRoute(name: "UI Test Route", legs: [leg]))
+        try? modelContext.save()
+    }
+    #endif
 
     @ViewBuilder
     private func destinationView(_ destination: AppDestination) -> some View {

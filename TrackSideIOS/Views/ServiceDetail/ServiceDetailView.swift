@@ -20,8 +20,6 @@ struct ServiceDetailView: View {
         Group {
             if let detail = service.detail {
                 serviceContent(detail)
-            } else if service.isLoading {
-                ProgressView("Loading service...")
             } else if let error = service.error {
                 ContentUnavailableView {
                     Label("Error", systemImage: "exclamationmark.triangle")
@@ -32,6 +30,11 @@ struct ServiceDetailView: View {
                         Task { await service.loadService(uid: uid, date: runDate) }
                     }
                 }
+            } else {
+                // Shown from the start, before loading begins as well as
+                // during it. With nothing to show, the group is empty and
+                // `.task` never runs, so the page stays blank.
+                ProgressView("Loading service...")
             }
         }
         .task {
