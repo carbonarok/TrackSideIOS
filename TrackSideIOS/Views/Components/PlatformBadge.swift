@@ -10,9 +10,7 @@ struct PlatformBadge: View {
                 Text("Plat")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                Text(platformText)
-                    .font(.caption)
-                    .fontWeight(.semibold)
+                SplitFlapText(text: platformText, style: .caption, color: tileInk)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
@@ -20,6 +18,14 @@ struct PlatformBadge: View {
             .foregroundStyle(foregroundColor)
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
+    }
+
+    /// The platform number's colour on its dark tile: amber when it has
+    /// changed, blue once confirmed.
+    private var tileInk: Color {
+        if platform?.changed == true { return SplitFlap.late }
+        if platform?.confirmed == true { return Color(red: 0.55, green: 0.8, blue: 1.0) }
+        return SplitFlap.ink
     }
 
     private var backgroundColor: Color {

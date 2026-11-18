@@ -2,7 +2,7 @@ import Foundation
 import ActivityKit
 
 /// Attributes for journey tracking Live Activities (multi-leg)
-struct JourneyActivityAttributes: ActivityAttributes {
+nonisolated struct JourneyActivityAttributes: ActivityAttributes {
     let routeName: String
     let originName: String
     let finalDestinationName: String
@@ -44,7 +44,7 @@ struct JourneyActivityAttributes: ActivityAttributes {
 }
 
 /// Attributes for per-leg Live Activities (one activity per leg in a journey)
-struct LegActivityAttributes: ActivityAttributes {
+nonisolated struct LegActivityAttributes: ActivityAttributes {
     let legIndex: Int
     let totalLegs: Int
     let headcode: String
@@ -76,7 +76,7 @@ struct LegActivityAttributes: ActivityAttributes {
 }
 
 /// Attributes for single train tracking Live Activities
-struct TrainActivityAttributes: ActivityAttributes {
+nonisolated struct TrainActivityAttributes: ActivityAttributes {
     let headcode: String
     let originName: String
     let destinationName: String

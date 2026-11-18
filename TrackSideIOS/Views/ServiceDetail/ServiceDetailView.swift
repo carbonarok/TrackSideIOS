@@ -55,100 +55,175 @@ struct ServiceDetailView: View {
 
     // MARK: - Main Content
 
-    @ViewBuilder
+    @Environment(\.spanningFold) private var spanningFold
+    /// How far down the fold runs, when the phone is half-folded with the
+    /// fold across the screen (tabletop): the top half becomes a platform
+    /// display.
+    @State private var tabletopFold: CGFloat?
+
+    /// The train on one list, or, with both halves of an unfolded iPhone
+    /// Duo, on two: about the train on one side of the fold, its stops on
+    /// the other.
     private func serviceContent(_ detail: ServiceDetail) -> some View {
-        List {
-            // Header + Progress
-            Section {
-                headerView(detail)
+        VStack(spacing: 0) {
+            if let fold = tabletopFold {
+                PlatformDisplay(detail: detail)
+                    .frame(height: max(0, fold - 20))
+                // The crease itself, and its margins either side.
+                Color.clear.frame(height: 40)
             }
+            serviceLists(detail)
+        }
+        .onGeometryChange(for: CGFloat?.self) { proxy in
+            Self.tabletopFold(in: proxy)
+        } action: { fold in
+            tabletopFold = fold
+        }
+    }
 
-            // Quick stats
-            Section {
-                statsGrid(detail)
-            }
+    /// Where a fold across the screen starts, if the phone is bent at it.
+    private static func tabletopFold(in proxy: GeometryProxy) -> CGFloat? {
+        #if DEBUG
+        // The simulator lies flat and won't turn its inner screen sideways,
+        // so UI tests pretend: a fold halfway down, bent.
+        if ProcessInfo.processInfo.arguments.contains("-UITestTabletop") {
+            return proxy.size.height / 2
+        }
+        #endif
+        guard #available(iOS 27.1, *) else { return nil }
+        guard let fold = proxy.reservedRegions(kind: .division).first(where: \.isActive),
+              fold.frame.width > fold.frame.height,
+              fold.frame.minY >= 200,
+              fold.frame.minY <= proxy.size.height - 200
+        else { return nil }
+        return fold.frame.minY
+    }
 
-            // Track button
-            Section {
-                trackButton(detail)
-            }
-
-            // Associations (joins, divides, next trains)
-            if let associations = detail.associations, !associations.isEmpty {
-                Section {
-                    ForEach(associations, id: \.service.id) { assoc in
-                        associationRow(assoc)
+    @ViewBuilder
+    private func serviceLists(_ detail: ServiceDetail) -> some View {
+        Group {
+            if let fold = spanningFold {
+                HStack(spacing: 0) {
+                    List {
+                        summarySections(detail)
                     }
-                } header: {
-                    Text("Connections")
-                }
-            }
+                    .listStyle(.plain)
+                    .clearOfFold(.trailing)
+                    .frame(width: fold)
 
-            // Calling points
-            Section {
-                let callingStops = callingPointStops(detail)
-                ForEach(Array(callingStops.enumerated()), id: \.element.stop.id) { index, entry in
-                    StopRow(
-                        stop: entry.stop,
-                        isCurrentPosition: entry.isCurrent,
-                        isFirst: index == 0,
-                        isLast: index == callingStops.count - 1,
-                        isPassed: entry.isPassed
-                    )
-                }
-            } header: {
-                HStack {
-                    Text("Calling Points")
-                    Spacer()
-                    let stats = stopStats(detail)
-                    if stats.remaining > 0 && stats.remaining < stats.total {
-                        Text("\(stats.remaining) remaining")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    List {
+                        stopSections(detail)
                     }
+                    .listStyle(.plain)
+                    .clearOfFold(.leading)
                 }
-            }
-
-            // Pass stops (collapsed)
-            let passes = detail.stops.filter { $0.kind == .pass }
-            if !passes.isEmpty {
-                Section {
-                    DisclosureGroup("Passing Points (\(passes.count))") {
-                        ForEach(passes) { stop in
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(.secondary.opacity(0.3))
-                                    .frame(width: 6, height: 6)
-                                Text(stop.name)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                if let passTime = stop.pass {
-                                    TimeDisplay(passTime, showDelay: false)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .font(.subheadline)
+            } else {
+                List {
+                    summarySections(detail)
+                    stopSections(detail)
                 }
-            }
-
-            // Cancel/late reason detail
-            if detail.cancelReason != nil || detail.lateReason != nil {
-                Section {
-                    disruptionInfo(detail)
-                } header: {
-                    Text("Disruption")
-                }
+                .listStyle(.plain)
             }
         }
-        .listStyle(.plain)
         .navigationTitle(detail.headcode ?? detail.uid)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             await service.loadService(uid: uid, date: runDate)
+        }
+    }
+
+    /// About the train: where it is, how it's running, why, and what it
+    /// joins or becomes.
+    @ViewBuilder
+    private func summarySections(_ detail: ServiceDetail) -> some View {
+        // Header + Progress
+        Section {
+            headerView(detail)
+        }
+
+        // Quick stats
+        Section {
+            statsGrid(detail)
+        }
+
+        // Track button
+        Section {
+            trackButton(detail)
+        }
+
+        // Associations (joins, divides, next trains)
+        if let associations = detail.associations, !associations.isEmpty {
+            Section {
+                ForEach(associations, id: \.service.id) { assoc in
+                    associationRow(assoc)
+                }
+            } header: {
+                Text("Connections")
+            }
+        }
+
+        // Cancel/late reason detail
+        if detail.cancelReason != nil || detail.lateReason != nil {
+            Section {
+                disruptionInfo(detail)
+            } header: {
+                Text("Disruption")
+            }
+        }
+    }
+
+    /// Where the train stops, and where it passes.
+    @ViewBuilder
+    private func stopSections(_ detail: ServiceDetail) -> some View {
+        // Calling points
+        Section {
+            let callingStops = callingPointStops(detail)
+            ForEach(Array(callingStops.enumerated()), id: \.element.stop.id) { index, entry in
+                StopRow(
+                    stop: entry.stop,
+                    isCurrentPosition: entry.isCurrent,
+                    isFirst: index == 0,
+                    isLast: index == callingStops.count - 1,
+                    isPassed: entry.isPassed
+                )
+            }
+        } header: {
+            HStack {
+                Text("Calling Points")
+                Spacer()
+                let stats = stopStats(detail)
+                if stats.remaining > 0 && stats.remaining < stats.total {
+                    Text("\(stats.remaining) remaining")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        // Pass stops (collapsed)
+        let passes = detail.stops.filter { $0.kind == .pass }
+        if !passes.isEmpty {
+            Section {
+                DisclosureGroup("Passing Points (\(passes.count))") {
+                    ForEach(passes) { stop in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(.secondary.opacity(0.3))
+                                .frame(width: 6, height: 6)
+                            Text(stop.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if let passTime = stop.pass {
+                                TimeDisplay(passTime, showDelay: false, style: .caption)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .font(.subheadline)
+            }
         }
     }
 
@@ -169,10 +244,7 @@ struct ServiceDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         if let headcode = detail.headcode {
-                            Text(headcode)
-                                .font(.title)
-                                .fontWeight(.bold)
-                                .monospaced()
+                            SplitFlapText(text: headcode, style: .title, weight: .bold)
                         }
                         Text(detail.uid)
                             .font(.caption)
@@ -270,15 +342,12 @@ struct ServiceDetailView: View {
                                 .font(.title3)
                                 .strikethrough()
                                 .foregroundStyle(.secondary)
-                            Text(live)
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundStyle(delay >= 10 ? .red : delay >= 5 ? .orange : .yellow)
+                            SplitFlapText(text: live, style: .title3, weight: .bold,
+                                          color: SplitFlap.ink(delayMinutes: delay))
                         } else {
-                            Text(hasArrived ? (live ?? scheduled) : scheduled)
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundStyle(hasArrived ? .green : .primary)
+                            SplitFlapText(text: hasArrived ? (live ?? scheduled) : scheduled,
+                                          style: .title3, weight: .bold,
+                                          color: hasArrived ? Color(red: 0.45, green: 0.9, blue: 0.5) : SplitFlap.ink)
                         }
                     }
                     .monospacedDigit()

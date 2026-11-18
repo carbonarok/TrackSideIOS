@@ -44,6 +44,11 @@ nonisolated struct CalculatedJourney: Identifiable, Codable, Sendable {
 
     var totalLegs: Int { legs.count }
 
+    /// The same for the same trains, however many times it's calculated.
+    var trainsKey: String {
+        legs.map { "\($0.service.uid)|\($0.service.runDate)" }.joined(separator: ">")
+    }
+
     var hasIssues: Bool {
         legs.contains { $0.isCancelled } || legs.isEmpty
     }

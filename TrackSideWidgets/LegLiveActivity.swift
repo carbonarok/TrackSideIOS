@@ -133,27 +133,19 @@ struct LegLiveActivity: Widget {
                 }
 
             } compactLeading: {
-                HStack(spacing: 3) {
-                    Image(systemName: phaseIcon(state.phase))
-                        .font(.caption2)
-                        .foregroundStyle(phaseColor(state))
-                    if state.phase == "onTrain" || state.phase == "arrived" {
-                        Text(state.expectedArrival ?? state.scheduledArrival ?? attrs.headcode)
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(state.expectedArrival != nil ? .orange : .primary)
-                    } else {
-                        Text(state.expectedDeparture ?? state.scheduledDeparture ?? attrs.headcode)
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(state.expectedDeparture != nil ? .orange : .primary)
-                    }
-                }
+                let arriving = state.phase == "onTrain" || state.phase == "arrived"
+                let expected = arriving ? state.expectedArrival : state.expectedDeparture
+                let scheduled = arriving ? state.scheduledArrival : state.scheduledDeparture
+                CompactIslandLabel(
+                    text: expected ?? scheduled ?? attrs.headcode,
+                    systemImage: phaseIcon(state.phase),
+                    textColor: expected != nil ? .orange : .primary,
+                    iconColor: phaseColor(state)
+                )
             } compactTrailing: {
                 if state.isCancelled {
                     Text("CANC")
-                        .font(.caption2)
-                        .fontWeight(.bold)
+                        .compactIslandText()
                         .foregroundStyle(.red)
                 } else if state.phase == "arrived" {
                     Image(systemName: "checkmark.circle.fill")
@@ -161,18 +153,15 @@ struct LegLiveActivity: Widget {
                         .foregroundStyle(.green)
                 } else if state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
                     Text(depDate, style: .timer)
-                        .font(.caption2)
-                        .monospacedDigit()
+                        .compactIslandText()
                         .frame(maxWidth: 56)
                 } else if let maxDelay = [state.departureDelayMinutes, state.arrivalDelayMinutes].max(), maxDelay > 0 {
                     Text("+\(maxDelay)m")
-                        .font(.caption2)
-                        .fontWeight(.bold)
+                        .compactIslandText()
                         .foregroundStyle(.orange)
                 } else if let p = state.phase == "boarding" ? state.departurePlatform : state.arrivalPlatform {
                     Text("P\(p)")
-                        .font(.caption2)
-                        .fontWeight(.bold)
+                        .compactIslandText()
                 } else {
                     Image(systemName: "tram.fill")
                         .font(.caption2)
@@ -258,7 +247,12 @@ private struct LegLockScreenView: View {
         case .small:
             watchLayout
         default:
-            phoneLayout
+            // The unfolded iPhone Duo's lock screen is about twice as wide;
+            // there the leg reads across, from departure to arrival.
+            ViewThatFits(in: .horizontal) {
+                wideLayout
+                phoneLayout
+            }
         }
     }
 
@@ -367,6 +361,133 @@ private struct LegLockScreenView: View {
     }
 
     // MARK: - Phone Layout (Lock Screen)
+
+    // MARK: - Wide Layout (unfolded iPhone Duo)
+
+    private var wideLayout: some View {
+        HStack(alignment: .center, spacing: 24) {
+            endpoint(
+                label: "Departs",
+                station: attrs.originName,
+                scheduled: state.scheduledDeparture,
+                expected: state.expectedDeparture,
+                platform: state.departurePlatform,
+                platformChanged: state.departurePlatformChanged,
+                alignment: .leading
+            )
+
+            VStack(spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(attrs.headcode)
+                        .font(.headline)
+                        .fontWeight(.bold)
+                    Text(attrs.operatorName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 6) {
+                    Rectangle().fill(.secondary.opacity(0.4)).frame(height: 1)
+                    Image(systemName: phaseIcon)
+                        .foregroundStyle(phaseColor)
+                    Rectangle().fill(.secondary.opacity(0.4)).frame(height: 1)
+                }
+                wideStatus
+                if attrs.totalLegs > 1 {
+                    Text("Leg \(attrs.legIndex + 1) of \(attrs.totalLegs)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(minWidth: 200)
+
+            endpoint(
+                label: "Arrives",
+                station: attrs.destinationName,
+                scheduled: state.scheduledArrival,
+                expected: state.expectedArrival,
+                platform: state.arrivalPlatform,
+                platformChanged: state.arrivalPlatformChanged,
+                alignment: .trailing
+            )
+        }
+        .padding(16)
+        // Only where it has this much room; otherwise the phone layout.
+        .frame(minWidth: 560)
+    }
+
+    @ViewBuilder
+    private var wideStatus: some View {
+        if state.isCancelled {
+            Text("Cancelled")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.red)
+        } else if state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
+            Text("Leaves \(depDate, style: .relative)")
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.blue)
+        } else if state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
+            Text("Arrives \(arrDate, style: .relative)")
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.green)
+        } else if state.phase == "arrived" {
+            Text("Arrived")
+                .font(.subheadline)
+                .foregroundStyle(.green)
+        } else if let delay = [state.departureDelayMinutes, state.arrivalDelayMinutes].max(), delay > 0 {
+            Text("\(delay) min late")
+                .font(.subheadline)
+                .foregroundStyle(.orange)
+        } else {
+            Text("On time")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func endpoint(
+        label: String,
+        station: String,
+        scheduled: String?,
+        expected: String?,
+        platform: String?,
+        platformChanged: Bool,
+        alignment: HorizontalAlignment
+    ) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(label.uppercased())
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(station)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+            HStack(spacing: 6) {
+                if let expected, expected != scheduled {
+                    Text(scheduled ?? "")
+                        .strikethrough()
+                        .foregroundStyle(.secondary)
+                    Text(expected)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text(scheduled ?? "--:--")
+                }
+            }
+            .font(.title2)
+            .fontWeight(.bold)
+            .monospacedDigit()
+            if let platform {
+                Text("Platform \(platform)")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(platformChanged ? .orange : .primary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: alignment == .leading ? .leading : .trailing)
+    }
 
     @ViewBuilder
     private var phoneLayout: some View {

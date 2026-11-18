@@ -9,17 +9,53 @@ struct RouteDetailView: View {
     @State private var calculator = JourneyCalculator()
     @State private var departureTime = Date()
     @State private var showTimePicker = false
-    @State private var expandedJourneyID: UUID?
+    /// Which journey is open, by its trains rather than its id: refreshing
+    /// (or saved journeys giving way to fresh ones) makes new ids for the
+    /// same journeys, and the open one shouldn't snap shut.
+    @State private var expandedJourneyKey: String?
     @State private var trackingError: String?
     /// Grows with the text size, so times don't get cut off.
-    @ScaledMetric(relativeTo: .title3) private var journeyTimeWidth: CGFloat = 80
+    @ScaledMetric(relativeTo: .title3) private var journeyTimeWidth: CGFloat = 104
 
     /// The active tracker for this route (nil if not tracking this route)
     private var activeTracker: JourneyTracker? {
         journeyManager.tracker(for: route.persistentModelID)
     }
 
+    @Environment(\.spanningFold) private var spanningFold
+
     var body: some View {
+        Group {
+            if let fold = spanningFold {
+                // Both halves of an unfolded iPhone Duo: the journeys on one
+                // side of the fold, the chosen one's trains on the other.
+                HStack(spacing: 0) {
+                    journeysColumn
+                        .clearOfFold(.trailing)
+                        .frame(width: fold)
+                    chosenJourneyPane
+                        .clearOfFold(.leading)
+                }
+            } else {
+                journeysColumn
+            }
+        }
+        .navigationTitle(route.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await calculator.calculateMultiple(route: route, departAt: departureTime)
+        }
+        .alert("Tracking Error", isPresented: .init(
+            get: { trackingError != nil },
+            set: { if !$0 { trackingError = nil } }
+        )) {
+            Button("OK") { trackingError = nil }
+        } message: {
+            Text(trackingError ?? "")
+        }
+    }
+
+    private var journeysColumn: some View {
         VStack(spacing: 0) {
             // Journey planner controls
             journeyControls
@@ -55,18 +91,30 @@ struct RouteDetailView: View {
                 Spacer()
             }
         }
-        .navigationTitle(route.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await calculator.calculateMultiple(route: route, departAt: departureTime)
-        }
-        .alert("Tracking Error", isPresented: .init(
-            get: { trackingError != nil },
-            set: { if !$0 { trackingError = nil } }
-        )) {
-            Button("OK") { trackingError = nil }
-        } message: {
-            Text(trackingError ?? "")
+    }
+
+    /// The journey open beside the list: the one chosen, or the first.
+    private var chosenJourney: CalculatedJourney? {
+        calculator.journeys.first { $0.trainsKey == expandedJourneyKey } ?? calculator.journeys.first
+    }
+
+    @ViewBuilder
+    private var chosenJourneyPane: some View {
+        if let journey = chosenJourney {
+            List {
+                Section {
+                    journeyDetails(journey)
+                } header: {
+                    Text("\(formatTimeShort(journey.departureTime)) to \(formatTimeShort(journey.arrivalTime))")
+                }
+            }
+            .listStyle(.plain)
+        } else {
+            ContentUnavailableView(
+                "No Journey Chosen",
+                systemImage: "arrow.triangle.swap",
+                description: Text("Choose a journey to see its trains and connections.")
+            )
         }
     }
 
@@ -219,12 +267,16 @@ struct RouteDetailView: View {
 
     @ViewBuilder
     private func journeyCard(_ journey: CalculatedJourney) -> some View {
-        let isExpanded = expandedJourneyID == journey.id
+        let isExpanded = expandedJourneyKey == journey.trainsKey
+        // Beside the fold the details open in the other half, so the card
+        // is chosen rather than expanded.
+        let isChosen = spanningFold != nil && chosenJourney?.trainsKey == journey.trainsKey
 
         // Compact header — always visible
         Button {
             withAnimation(.easeInOut(duration: 0.25)) {
-                expandedJourneyID = isExpanded ? nil : journey.id
+                // Beside the fold, choosing again keeps it chosen.
+                expandedJourneyKey = isExpanded && spanningFold == nil ? nil : journey.trainsKey
             }
         } label: {
             HStack(spacing: 8) {
@@ -240,9 +292,7 @@ struct RouteDetailView: View {
                 HStack(spacing: 0) {
                 // Departure time
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(formatTimeShort(journey.departureTime))
-                        .font(.title3)
-                        .fontWeight(.bold)
+                    SplitFlapText(text: formatTimeShort(journey.departureTime), style: .title3, weight: .bold)
                     Text(journey.legs.first?.originName ?? "")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -277,9 +327,7 @@ struct RouteDetailView: View {
 
                 // Arrival time
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(formatTimeShort(journey.arrivalTime))
-                        .font(.title3)
-                        .fontWeight(.bold)
+                    SplitFlapText(text: formatTimeShort(journey.arrivalTime), style: .title3, weight: .bold)
                     Text(journey.legs.last?.destinationName ?? "")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -311,38 +359,49 @@ struct RouteDetailView: View {
                 .frame(width: 30)
             }
             } // inner HStack
+            // A plain button only answers taps on what it draws; the gaps
+            // between the times and around the thin arrow didn't open it.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("journeyCard")
+        .listRowBackground(isChosen ? Color.accentColor.opacity(0.15) : nil)
+        .accessibilityAddTraits(isChosen ? .isSelected : [])
 
         // Expanded content — full journey details
-        if isExpanded {
-            // Platform & headcode info for each leg
-            ForEach(journey.legs) { leg in
-                if let connectionMins = leg.connectionMinutes {
-                    connectionSummary(minutes: connectionMins, stationName: leg.originName)
-                }
+        if isExpanded && spanningFold == nil {
+            journeyDetails(journey)
+        }
+    }
 
-                NavigationLink(value: AppDestination.service(ServiceRoute(uid: leg.service.uid, runDate: leg.service.runDate))) {
-                    legSummaryRow(leg)
-                }
-                .accessibilityIdentifier("journeyLeg")
-
+    /// A journey's trains, the connections between them, and tracking.
+    @ViewBuilder
+    private func journeyDetails(_ journey: CalculatedJourney) -> some View {
+        // Platform & headcode info for each leg
+        ForEach(journey.legs) { leg in
+            if let connectionMins = leg.connectionMinutes {
+                connectionSummary(minutes: connectionMins, stationName: leg.originName)
             }
 
-            // Track button
-            if activeTracker == nil || activeTracker?.isTracking != true {
-                Button {
-                    startTracking(journey: journey)
-                } label: {
-                    HStack {
-                        Image(systemName: "location.fill")
-                        Text("Track This Journey")
-                        Spacer()
-                    }
-                }
-                .padding(.vertical, 4)
+            NavigationLink(value: AppDestination.service(ServiceRoute(uid: leg.service.uid, runDate: leg.service.runDate))) {
+                legSummaryRow(leg)
             }
+            .accessibilityIdentifier("journeyLeg")
+
+        }
+
+        // Track button
+        if activeTracker == nil || activeTracker?.isTracking != true {
+            Button {
+                startTracking(journey: journey)
+            } label: {
+                HStack {
+                    Image(systemName: "location.fill")
+                    Text("Track This Journey")
+                    Spacer()
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 
@@ -357,13 +416,7 @@ struct RouteDetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     if let headcode = leg.service.headcode {
-                        Text(headcode)
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(.secondary.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                        SplitFlapText(text: headcode, style: .caption)
                     }
                     if let op = leg.service.operator {
                         Text(op.name)

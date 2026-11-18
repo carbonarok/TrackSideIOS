@@ -3,7 +3,7 @@ import SwiftUI
 struct BoardServiceRow: View {
     let service: BoardService
     /// Grows with the text size, so times don't get cut off.
-    @ScaledMetric(relativeTo: .body) private var timeColumnWidth: CGFloat = 75
+    @ScaledMetric(relativeTo: .body) private var timeColumnWidth: CGFloat = 86
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -72,7 +72,7 @@ struct BoardServiceRow: View {
     }
 
     private var time: some View {
-        TimeDisplay(service.stop.departure ?? service.stop.arrival)
+        TimeDisplay(service.stop.departure ?? service.stop.arrival, style: .body)
             .font(.body)
             .fontWeight(.semibold)
     }
@@ -115,13 +115,7 @@ struct BoardServiceRow: View {
 
             HStack(spacing: 6) {
                 if let headcode = service.headcode {
-                    Text(headcode)
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(.secondary.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                    SplitFlapText(text: headcode, style: .caption2, weight: .medium)
                 }
 
                 if let op = service.operator {

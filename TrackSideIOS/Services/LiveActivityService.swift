@@ -59,7 +59,8 @@ final class LiveActivityService {
 
     private func startLiveUpdates(for key: String, uid: String, date: String, destinationCRS: String?) {
         let topic = "train:\(uid)|\(date)"
-        Task {
+        let liveClient = liveClient
+        Task { [weak self] in
             await liveClient.connect()
             await liveClient.subscribe(to: topic)
 
@@ -69,7 +70,7 @@ final class LiveActivityService {
                     await self.refreshActivity(key: key, uid: uid, date: date, destinationCRS: destinationCRS)
                 }
             }
-            updateHandlers[key] = handlerID
+            self?.updateHandlers[key] = handlerID
         }
     }
 

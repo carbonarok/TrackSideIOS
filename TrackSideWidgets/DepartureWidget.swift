@@ -59,17 +59,22 @@ struct DepartureTimelineProvider: AppIntentTimelineProvider {
         if context.isPreview {
             return placeholder(in: context)
         }
-        return await fetchDepartures(for: configuration)
+        return await fetchDepartures(for: configuration, count: Self.count(for: context.family))
     }
 
     func timeline(for configuration: SelectStationIntent, in context: Context) async -> Timeline<DepartureEntry> {
-        let entry = await fetchDepartures(for: configuration)
+        let entry = await fetchDepartures(for: configuration, count: Self.count(for: context.family))
         // Refresh every 2 minutes
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 2, to: .now)!
         return Timeline(entries: [entry], policy: .after(nextUpdate))
     }
 
-    private func fetchDepartures(for config: SelectStationIntent) async -> DepartureEntry {
+    /// Twice as many for the extra large widget, which shows two columns.
+    private static func count(for family: WidgetFamily) -> Int {
+        family == .systemExtraLarge ? 12 : 6
+    }
+
+    private func fetchDepartures(for config: SelectStationIntent, count: Int) async -> DepartureEntry {
         let code = (config.stationCode ?? "WAT").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let name = config.stationName ?? code
         guard !code.isEmpty else {
@@ -89,7 +94,7 @@ struct DepartureTimelineProvider: AppIntentTimelineProvider {
             let decoder = JSONDecoder()
             let board = try decoder.decode(WidgetBoard.self, from: data)
             let displayName = board.location.name
-            let departures = Array(board.services.prefix(6)).map { svc in
+            let departures = Array(board.services.prefix(count)).map { svc in
                 let dep = svc.stop.departure
                 let scheduledTime = formatTime(dep?.public ?? dep?.working)
                 let expectedTime = formatTime(dep?.actual ?? dep?.estimated)
@@ -197,6 +202,8 @@ struct DepartureWidgetEntryView: View {
             mediumView
         case .systemLarge:
             largeView
+        case .systemExtraLarge:
+            extraLargeView
         default:
             mediumView
         }
@@ -392,6 +399,60 @@ struct DepartureWidgetEntryView: View {
         .containerBackground(.fill.tertiary, for: .widget)
     }
 
+    // MARK: - Extra Large Widget
+
+    /// For the iPad and the unfolded iPhone Duo: the board in two columns,
+    /// the next six on the left and the six after on the right.
+    private var extraLargeView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "tram.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.blue)
+                Text(entry.stationName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text(entry.stationCode)
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 8)
+
+            if let message = entry.errorMessage ?? (entry.departures.isEmpty ? "No departures" : nil) {
+                Spacer()
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                Spacer()
+            } else {
+                let half = (entry.departures.count + 1) / 2
+                HStack(alignment: .top, spacing: 16) {
+                    departureColumn(Array(entry.departures.prefix(half)))
+                    Divider()
+                    departureColumn(Array(entry.departures.dropFirst(half)))
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .containerBackground(.fill.tertiary, for: .widget)
+    }
+
+    private func departureColumn(_ departures: [DepartureEntry.WidgetDeparture]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(departures) { dep in
+                departureRow(dep)
+                if dep.id != departures.last?.id {
+                    Divider()
+                        .padding(.vertical, 3)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+
     // MARK: - Row
 
     private func departureRow(_ dep: DepartureEntry.WidgetDeparture) -> some View {
@@ -489,6 +550,8 @@ struct DepartureWidget: Widget {
         }
         .configurationDisplayName("Departures")
         .description("See upcoming departures from your station")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        // Extra large is offered only where there's room for it: the iPad,
+        // and the unfolded iPhone Duo.
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
     }
 }

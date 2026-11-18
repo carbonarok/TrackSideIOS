@@ -55,6 +55,10 @@ struct DepartureBoardView: View {
                 noStationView
             }
         }
+        // Pinned above whatever the board shows, even no station yet.
+        .safeAreaInset(edge: .top) {
+            TrackedJourneyBanner()
+        }
         .navigationTitle(selectedStation?.name ?? "Departures")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -64,6 +68,7 @@ struct DepartureBoardView: View {
                     Label("Search", systemImage: "magnifyingglass")
                 }
             }
+            .keepsVisible(.high)
             if selectedStation != nil {
                 ToolbarItem(placement: .primaryAction) {
                     filterButton
@@ -71,11 +76,19 @@ struct DepartureBoardView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     favouriteButton
                 }
+                .keepsVisible(.low)
             }
         }
         // Finding a train by headcode, in the standard search bar rather
         // than a row above the board.
-        .searchable(text: $serviceQuery, prompt: "Find a train by headcode")
+        // Always a field under the title: as a toolbar button (iOS 27 does
+        // that in narrower columns) it sat next to the station search button
+        // with the same magnifying glass.
+        .searchable(
+            text: $serviceQuery,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Find a train by headcode"
+        )
         .textInputAutocapitalization(.characters)
         .autocorrectionDisabled()
         .onSubmit(of: .search) {
@@ -448,7 +461,11 @@ struct DepartureBoardView: View {
                     modelContext.insert(fav)
                 }
             } label: {
-                Image(systemName: isFavourite ? "star.fill" : "star")
+                // A title as well as the star: where toolbars run short of
+                // room (the iPhone Duo's vertical bars), the item moves to an
+                // overflow menu that shows the title.
+                Label(isFavourite ? "Remove from Favourites" : "Add to Favourites",
+                      systemImage: isFavourite ? "star.fill" : "star")
                     .foregroundStyle(isFavourite ? .yellow : .secondary)
             }
         }

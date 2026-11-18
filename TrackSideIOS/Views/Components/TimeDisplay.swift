@@ -5,10 +5,13 @@ import SwiftUI
 struct TimeDisplay: View {
     let times: Times?
     let showDelay: Bool
+    /// The size of the split-flap tiles the time is shown on.
+    let style: Font.TextStyle
 
-    init(_ times: Times?, showDelay: Bool = true) {
+    init(_ times: Times?, showDelay: Bool = true, style: Font.TextStyle = .body) {
         self.times = times
         self.showDelay = showDelay
+        self.style = style
     }
 
     var body: some View {
@@ -19,10 +22,9 @@ struct TimeDisplay: View {
             let isCancelled = times.cancelled ?? false
 
             if isCancelled {
-                // Cancelled: struck-through in red
-                Text(scheduled)
-                    .strikethrough()
-                    .foregroundStyle(Color.delaySevere)
+                // Cancelled: the booked time in red
+                SplitFlapText(text: scheduled, style: style, color: SplitFlap.cancelled)
+                    .accessibilityLabel("\(scheduled), cancelled")
             } else if isChanged {
                 // Delayed/changed: scheduled struck-through above, live time below
                 VStack(alignment: .trailing, spacing: 1) {
@@ -32,9 +34,7 @@ struct TimeDisplay: View {
                         .font(.caption2)
 
                     HStack(spacing: 3) {
-                        Text(live!)
-                            .foregroundStyle(delayColor)
-                            .fontWeight(.semibold)
+                        SplitFlapText(text: live!, style: style, color: SplitFlap.ink(delayMinutes: times.delayMinutes ?? 1))
 
                         if showDelay, let delay = times.delayMinutes, delay > 0 {
                             Text("+\(delay)")
@@ -47,7 +47,7 @@ struct TimeDisplay: View {
             } else {
                 // On time: clean single time
                 HStack(spacing: 3) {
-                    Text(scheduled)
+                    SplitFlapText(text: scheduled, style: style)
 
                     if times.delayed == true, times.delayMinutes == nil {
                         Text("Late")

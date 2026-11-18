@@ -81,18 +81,15 @@ struct TrainLiveActivity: Widget {
                 }
             } compactLeading: {
                 Text(context.attributes.headcode)
-                    .font(.caption2)
-                    .fontWeight(.bold)
+                    .compactIslandText()
             } compactTrailing: {
                 if let arrival = context.state.expectedArrival ?? context.state.scheduledArrival {
                     Text(formatShort(arrival))
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
+                        .compactIslandText()
                         .foregroundStyle(context.state.delayMinutes > 0 ? .orange : .primary)
                 } else {
                     Text(context.state.status)
-                        .font(.caption2)
+                        .compactIslandText()
                 }
             } minimal: {
                 Image(systemName: "tram.fill")

@@ -116,32 +116,29 @@ struct JourneyLiveActivity: Widget {
                 }
             } compactLeading: {
                 // Phase icon + delay
-                HStack(spacing: 3) {
+                if context.state.overallDelayMinutes > 0 {
+                    CompactIslandLabel(
+                        text: "+\(context.state.overallDelayMinutes)",
+                        systemImage: phaseIcon(context.state.phase),
+                        textColor: .orange,
+                        iconColor: phaseColor(context.state)
+                    )
+                } else {
                     Image(systemName: phaseIcon(context.state.phase))
                         .font(.caption2)
                         .foregroundStyle(phaseColor(context.state))
-                    if context.state.overallDelayMinutes > 0 {
-                        Text("+\(context.state.overallDelayMinutes)")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.orange)
-                    }
                 }
             } compactTrailing: {
                 // Platform or countdown
                 if context.state.phase == "boarding", let depDate = context.state.departureDate {
                     Text(depDate, style: .timer)
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
+                        .compactIslandText()
                         .frame(maxWidth: 56)
                 } else if let plat = context.state.phase == "boarding"
                     ? context.state.departurePlatform
                     : context.state.arrivalPlatform {
                     Text("P\(plat)")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .monospacedDigit()
+                        .compactIslandText()
                 } else {
                     Image(systemName: "tram.fill")
                         .font(.caption2)

@@ -90,18 +90,18 @@ struct StopRow: View {
     private var timeColumn: some View {
         if stop.kind == .pass {
             // Pass: show pass time subtly
-            TimeDisplay(stop.pass, showDelay: false)
+            TimeDisplay(stop.pass, showDelay: false, style: .caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else if stop.kind == .origin || stop.startsHere == true {
             // Origin: departure time
-            TimeDisplay(stop.departure)
+            TimeDisplay(stop.departure, style: .subheadline)
         } else if stop.kind == .destination || stop.terminatesHere == true {
             // Destination: arrival time
-            TimeDisplay(stop.arrival)
+            TimeDisplay(stop.arrival, style: .subheadline)
         } else {
             // Intermediate stops: departure time only (what passengers need)
-            TimeDisplay(stop.departure)
+            TimeDisplay(stop.departure, style: .subheadline)
         }
     }
 
