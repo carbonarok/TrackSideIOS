@@ -62,19 +62,19 @@ struct JourneyHistoryView: View {
                     Text("+\(record.maxDelayMinutes) min")
                         .font(.caption2)
                         .fontWeight(.bold)
-                        .foregroundStyle(record.maxDelayMinutes >= 10 ? .red : .orange)
+                        .foregroundStyle(Color.delay(minutes: record.maxDelayMinutes))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background((record.maxDelayMinutes >= 10 ? Color.red : .orange).opacity(0.12))
+                        .background(Color.delay(minutes: record.maxDelayMinutes).opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                 } else {
                     Text("On time")
                         .font(.caption2)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.onTime)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(.green.opacity(0.12))
+                        .background(Color.onTime.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
             }
@@ -135,11 +135,11 @@ struct JourneyHistoryView: View {
         let onTimePercent = records.isEmpty ? 0 : Int(Double(onTimeCount) / Double(records.count) * 100)
 
         HStack(spacing: 0) {
-            statCard(value: "\(onTimePercent)%", label: "On Time", color: onTimePercent >= 80 ? .green : .orange)
+            statCard(value: "\(onTimePercent)%", label: "On Time", color: onTimePercent >= 80 ? .onTime : .delayModerate)
             Divider().frame(height: 36)
-            statCard(value: "\(avgDelay)m", label: "Avg Delay", color: avgDelay < 5 ? .green : avgDelay < 10 ? .orange : .red)
+            statCard(value: "\(avgDelay)m", label: "Avg Delay", color: avgDelay < 5 ? .onTime : .delay(minutes: avgDelay))
             Divider().frame(height: 36)
-            statCard(value: "\(cancelledCount)", label: "Cancelled", color: cancelledCount == 0 ? .green : .red)
+            statCard(value: "\(cancelledCount)", label: "Cancelled", color: cancelledCount == 0 ? .onTime : .delaySevere)
         }
         .padding(.vertical, 4)
     }

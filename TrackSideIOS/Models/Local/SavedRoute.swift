@@ -5,6 +5,9 @@ import SwiftData
 final class SavedRoute {
     var name: String
     var createdAt: Date
+    /// Where the route sits in the list once it's been moved by hand.
+    /// Routes never moved have none and stay at the top, newest first.
+    var sortOrder: Int?
     @Relationship(deleteRule: .cascade, inverse: \SavedLeg.route)
     var legs: [SavedLeg]
 
@@ -12,6 +15,19 @@ final class SavedRoute {
         self.name = name
         self.createdAt = .now
         self.legs = legs
+    }
+
+    /// Routes in the order the list shows them: new routes at the top,
+    /// newest first, then the ones placed by hand, in the order they were put.
+    static func ordered(_ routes: [SavedRoute]) -> [SavedRoute] {
+        routes.sorted { a, b in
+            switch (a.sortOrder, b.sortOrder) {
+            case (nil, nil): a.createdAt > b.createdAt
+            case (nil, _): true
+            case (_, nil): false
+            case let (x?, y?): x != y ? x < y : a.createdAt > b.createdAt
+            }
+        }
     }
 
     var sortedLegs: [SavedLeg] {

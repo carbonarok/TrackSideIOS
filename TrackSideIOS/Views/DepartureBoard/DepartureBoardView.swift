@@ -9,10 +9,6 @@ struct DepartureBoardView: View {
     @State private var boardService: DepartureBoardService
     @State private var showingSearch = false
     @State private var selectedStation: Location?
-    @State private var searchMode: SearchMode = .station
-    @State private var serviceQuery = ""
-    @State private var serviceResults: [ServiceSummary] = []
-    @State private var isSearchingServices = false
     @AppStorage("lastStationCode") private var lastStationCode = ""
     @AppStorage("lastStationName") private var lastStationName = ""
     @State private var callingAtFilter = ""
@@ -20,12 +16,7 @@ struct DepartureBoardView: View {
     @State private var showMessages = false
     @FocusState private var callingAtFocused: Bool
 
-    private let apiClient = APIClient()
-
-    enum SearchMode {
-        case station
-        case service
-    }
+    @Environment(\.showDestination) private var showDestination
 
     init(liveClient: LiveClient) {
         self.liveClient = liveClient
@@ -37,19 +28,14 @@ struct DepartureBoardView: View {
             if let board = boardService.board {
                 boardContent(board)
             } else if boardService.isLoading {
-                ProgressView("Loading \(boardService.mode.rawValue.lowercased())...")
+                LoadingRows(kind: .board)
             } else if let error = boardService.error {
-                ContentUnavailableView {
-                    Label("Error", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error)
-                } actions: {
-                    if selectedStation != nil {
-                        Button("Retry") {
-                            Task { await reload() }
-                        }
-                    }
-                }
+                ProblemView(
+                    title: ServerSettings.current == nil ? "No Server Yet" : "Can't Load the Board",
+                    message: error,
+                    systemImage: ServerSettings.current == nil ? "server.rack" : "wifi.exclamationmark",
+                    retry: selectedStation == nil ? nil : { Task { await reload() } }
+                )
             } else {
                 // No station selected — show favourites or prompt
                 noStationView
@@ -65,7 +51,7 @@ struct DepartureBoardView: View {
                 Button {
                     showingSearch = true
                 } label: {
-                    Label("Search", systemImage: "magnifyingglass")
+                    Label("Search Stations and Trains", systemImage: "magnifyingglass")
                 }
             }
             .keepsVisible(.high)
@@ -79,33 +65,19 @@ struct DepartureBoardView: View {
                 .keepsVisible(.low)
             }
         }
-        // Finding a train by headcode, in the standard search bar rather
-        // than a row above the board.
-        // Always a field under the title: as a toolbar button (iOS 27 does
-        // that in narrower columns) it sat next to the station search button
-        // with the same magnifying glass.
-        .searchable(
-            text: $serviceQuery,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Find a train by headcode"
-        )
-        .textInputAutocapitalization(.characters)
-        .autocorrectionDisabled()
-        .onSubmit(of: .search) {
-            searchServices()
-        }
-        .onChange(of: serviceQuery) { _, newValue in
-            if newValue.count >= 3 {
-                searchServices()
-            } else if newValue.isEmpty {
-                serviceResults = []
-            }
-        }
         .sheet(isPresented: $showingSearch) {
             StationSearchView { location in
                 selectStation(location)
+            } onSelectService: { train in
+                showDestination?(.service(train))
             }
         }
+        // A server set up after the board first tried to load (the first
+        // launch) is used straight away, without a Retry.
+        .onReceive(NotificationCenter.default.publisher(for: ServerSettings.didChange)) { _ in
+            Task { await reload() }
+        }
+        .sensoryFeedback(.selection, trigger: boardService.mode)
         .refreshable {
             await reload()
         }
@@ -124,42 +96,19 @@ struct DepartureBoardView: View {
 
     @ViewBuilder
     private var noStationView: some View {
-        if favourites.isEmpty && serviceResults.isEmpty {
+        if favourites.isEmpty {
             ContentUnavailableView {
-                Label("No Station Selected", systemImage: "train.side.front.car")
+                Label("Choose a Station", systemImage: "train.side.front.car")
             } description: {
-                Text("Tap the search button to find a station")
+                Text("See live departures and arrivals, or find a train by its headcode.")
             } actions: {
-                Button("Search Stations") {
+                Button("Search") {
                     showingSearch = true
                 }
+                .buttonStyle(.borderedProminent)
             }
         } else {
             List {
-                if isSearchingServices && serviceResults.isEmpty {
-                    Section {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Searching…")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                if !serviceResults.isEmpty {
-                    Section {
-                        ForEach(serviceResults, id: \.id) { service in
-                            DestinationLink(.service(ServiceRoute(uid: service.uid, runDate: service.runDate))) {
-                                serviceResultRow(service)
-                            }
-                        }
-                    } header: {
-                        Text("\(serviceResults.count) services found")
-                    }
-                }
-
                 // Favourites
                 Section {
                     ForEach(favourites) { station in
@@ -170,12 +119,12 @@ struct DepartureBoardView: View {
                             HStack(spacing: 12) {
                                 // Station icon with accent
                                 ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(.blue.opacity(0.1))
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color.accentColor.opacity(0.12))
                                         .frame(width: 40, height: 40)
                                     Image(systemName: "train.side.front.car")
                                         .font(.body)
-                                        .foregroundStyle(.blue)
+                                        .foregroundStyle(.tint)
                                 }
 
                                 VStack(alignment: .leading, spacing: 2) {
@@ -257,30 +206,6 @@ struct DepartureBoardView: View {
                         }
                     }
                     .padding(.vertical, 2)
-                }
-            }
-
-            if isSearchingServices && serviceResults.isEmpty {
-                Section {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Searching…")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            if !serviceResults.isEmpty {
-                Section {
-                    ForEach(serviceResults, id: \.id) { service in
-                        DestinationLink(.service(ServiceRoute(uid: service.uid, runDate: service.runDate))) {
-                            serviceResultRow(service)
-                        }
-                    }
-                } header: {
-                    Text("\(serviceResults.count) services found")
                 }
             }
 
@@ -410,41 +335,6 @@ struct DepartureBoardView: View {
         }
     }
 
-    @ViewBuilder
-    private func serviceResultRow(_ service: ServiceSummary) -> some View {
-        HStack(spacing: 10) {
-            if let op = service.operator {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(op.brandColor)
-                    .frame(width: 4, height: 36)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    if let headcode = service.headcode {
-                        Text(headcode)
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .monospaced()
-                    }
-                    StatusBadge(status: service.status, cancelled: service.isCancelled)
-                }
-                HStack(spacing: 4) {
-                    Text(service.originName)
-                    Image(systemName: "arrow.right")
-                        .font(.caption2)
-                    Text(service.destinationName)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                if let op = service.operator {
-                    Text(op.name)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
     // MARK: - Favourite Button
 
     @ViewBuilder
@@ -468,6 +358,7 @@ struct DepartureBoardView: View {
                       systemImage: isFavourite ? "star.fill" : "star")
                     .foregroundStyle(isFavourite ? .yellow : .secondary)
             }
+            .sensoryFeedback(.selection, trigger: isFavourite)
         }
     }
 
@@ -477,23 +368,7 @@ struct DepartureBoardView: View {
         selectedStation = location
         lastStationCode = location.displayCode
         lastStationName = location.name
-        serviceResults = []
-        serviceQuery = ""
         Task { await boardService.loadBoard(for: location.displayCode, mode: boardService.mode) }
-    }
-
-    private func searchServices() {
-        let query = serviceQuery.trimmingCharacters(in: .whitespaces)
-        guard query.count >= 2 else { return }
-        isSearchingServices = true
-        Task {
-            do {
-                serviceResults = try await apiClient.searchServices(query: query)
-            } catch {
-                serviceResults = []
-            }
-            isSearchingServices = false
-        }
     }
 
     private func reload() async {

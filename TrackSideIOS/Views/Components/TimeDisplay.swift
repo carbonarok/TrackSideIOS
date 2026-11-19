@@ -76,3 +76,54 @@ struct TimeDisplay: View {
         return String(timeString.prefix(5))
     }
 }
+
+/// HH:MM from an ISO 8601 timestamp ("2026-10-06T14:32:00+01:00") or a
+/// time that's already short.
+nonisolated func clockTime(_ timeString: String?) -> String? {
+    guard let timeString, !timeString.isEmpty else { return nil }
+    if timeString.count > 10, let tIndex = timeString.firstIndex(of: "T") {
+        return String(timeString[timeString.index(after: tIndex)...].prefix(5))
+    }
+    return String(timeString.prefix(5))
+}
+
+/// How a train is running, in words, as a station board puts it: "On time",
+/// "Exp 16:45", "Delayed" or "Cancelled". Colour backs the words up, never
+/// replaces them.
+struct TrainStatusText: View {
+    let times: Times?
+    var cancelled = false
+
+    var body: some View {
+        let (text, color) = describe()
+        Text(text)
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundStyle(color)
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private func describe() -> (String, Color) {
+        if cancelled || times?.cancelled == true { return ("Cancelled", .delaySevere) }
+        guard let times else { return ("", .secondary) }
+        let scheduled = clockTime(times.public ?? times.working)
+        if let actual = clockTime(times.actual) {
+            let delay = times.delayMinutes ?? 0
+            return (actual == scheduled ? "On time" : actual, delay > 0 ? .delay(minutes: delay) : .onTime)
+        }
+        if let estimated = clockTime(times.estimated), estimated != scheduled {
+            return ("Exp \(estimated)", .delay(minutes: max(1, times.delayMinutes ?? 1)))
+        }
+        if times.delayed == true { return ("Delayed", .delayModerate) }
+        return ("On time", .onTime)
+    }
+}
+
+extension Times {
+    /// Running late enough, or cancelled, to flag on a list.
+    var isDisrupted: Bool {
+        cancelled == true || (delayMinutes ?? 0) >= 1 || delayed == true
+    }
+}

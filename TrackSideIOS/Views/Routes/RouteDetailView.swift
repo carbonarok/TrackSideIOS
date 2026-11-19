@@ -8,7 +8,6 @@ struct RouteDetailView: View {
     @Environment(ActiveJourneyManager.self) private var journeyManager
     @State private var calculator = JourneyCalculator()
     @State private var departureTime = Date()
-    @State private var showTimePicker = false
     /// Which journey is open, by its trains rather than its id: refreshing
     /// (or saved journeys giving way to fresh ones) makes new ids for the
     /// same journeys, and the open one shouldn't snap shut.
@@ -45,6 +44,9 @@ struct RouteDetailView: View {
         .task {
             await calculator.calculateMultiple(route: route, departAt: departureTime)
         }
+        .sensoryFeedback(trigger: activeTracker?.isTracking == true) { _, tracking in
+            tracking ? .success : .impact(weight: .light)
+        }
         .alert("Tracking Error", isPresented: .init(
             get: { trackingError != nil },
             set: { if !$0 { trackingError = nil } }
@@ -62,33 +64,15 @@ struct RouteDetailView: View {
 
             // Content
             // While refreshing, keep showing the journeys already found.
-            if calculator.isCalculating && calculator.journeys.isEmpty {
-                Spacer()
-                VStack(spacing: 12) {
-                    ProgressView()
-                    Text("Finding journeys...")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            } else if !calculator.journeys.isEmpty {
+            if !calculator.journeys.isEmpty {
                 journeyList
-            } else if let error = calculator.error {
-                Spacer()
-                ContentUnavailableView {
-                    Label("No Journeys Found", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error)
-                } actions: {
-                    Button("Try Again") {
-                        Task { await calculator.calculateMultiple(route: route, departAt: departureTime) }
-                    }
+            } else if let error = calculator.error, !calculator.isCalculating {
+                ProblemView(title: "No Journeys Found", message: error, systemImage: "calendar.badge.exclamationmark") {
+                    Task { await recalculate() }
                 }
-                Spacer()
+                .frame(maxHeight: .infinity)
             } else {
-                Spacer()
-                ProgressView()
-                Spacer()
+                LoadingRows(kind: .journeys, count: 5)
             }
         }
     }
@@ -120,75 +104,56 @@ struct RouteDetailView: View {
 
     // MARK: - Journey Controls
 
-    @ViewBuilder
+    /// When to leave: a date picker, and a way back to now.
     private var journeyControls: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Image(systemName: "clock")
-                    .foregroundStyle(.blue)
-
-                if showTimePicker {
-                    DatePicker("Depart at", selection: $departureTime, displayedComponents: [.date, .hourAndMinute])
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                } else {
-                    Button {
-                        showTimePicker = true
-                    } label: {
-                        HStack {
-                            Text("Depart at")
-                                .foregroundStyle(.secondary)
-                            Text(formatDepartureTime(departureTime))
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .tint(.primary)
-                }
-
-                Spacer()
-
-                Button {
-                    departureTime = Date()
-                    Task { await calculator.calculateMultiple(route: route, departAt: departureTime) }
-                    showTimePicker = false
-                } label: {
-                    Text("Now")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Button {
-                    Task { await calculator.calculateMultiple(route: route, departAt: departureTime) }
-                    showTimePicker = false
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+        HStack(spacing: 12) {
+            DatePicker(selection: $departureTime, displayedComponents: [.date, .hourAndMinute]) {
+                Label("Leaving", systemImage: "clock")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(.secondary)
             }
+            .datePickerStyle(.compact)
 
-            // Quick time adjustments
-            if !calculator.journeys.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach([-30, -15, 15, 30, 60], id: \.self) { offset in
-                        Button {
-                            departureTime = departureTime.addingTimeInterval(TimeInterval(offset * 60))
-                            Task { await calculator.calculateMultiple(route: route, departAt: departureTime) }
-                        } label: {
-                            Text(offset > 0 ? "+\(offset)m" : "\(offset)m")
-                                .font(.caption2)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
-                    }
-                    Spacer()
-                }
+            Button("Now") {
+                departureTime = Date()
             }
+            .buttonStyle(.bordered)
+            .disabled(abs(departureTime.timeIntervalSinceNow) < 60)
         }
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background(.bar)
+        .onChange(of: departureTime) {
+            Task { await recalculate() }
+        }
+        .sensoryFeedback(.selection, trigger: departureTime)
+    }
+
+    private func recalculate() async {
+        await calculator.calculateMultiple(route: route, departAt: departureTime)
+    }
+
+    /// Earlier and later journeys than the ones listed, as on a journey
+    /// planner.
+    private var earlierAndLater: some View {
+        HStack(spacing: 12) {
+            Button {
+                departureTime = departureTime.addingTimeInterval(-60 * 60)
+            } label: {
+                Label("Earlier", systemImage: "chevron.up")
+                    .frame(maxWidth: .infinity)
+            }
+            Button {
+                let last = calculator.journeys.last?.departureTime.flatMap(parseTime)
+                departureTime = (last ?? departureTime.addingTimeInterval(60 * 60)).addingTimeInterval(60)
+            } label: {
+                Label("Later", systemImage: "chevron.down")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.bordered)
+        .listRowSeparator(.hidden)
+        .padding(.vertical, 6)
     }
 
     // MARK: - Journey List
@@ -201,18 +166,16 @@ struct RouteDetailView: View {
                 Section {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(.green)
-                                    .frame(width: 8, height: 8)
-                                Text("Live Tracking")
+                            HStack(spacing: 8) {
+                                LiveDot()
+                                Text("Tracking live")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                             }
                             if tracker.updatedLegs.contains(where: { $0.isCancelled }) {
                                 Text("A train on this journey has been cancelled")
                                     .font(.caption)
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(Color.delaySevere)
                             }
                         }
                         Spacer()
@@ -232,7 +195,7 @@ struct RouteDetailView: View {
                 Section {
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.triangle.2.circlepath")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.delayModerate)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Saved journeys from \(savedAt, format: .dateTime.hour().minute())")
                                 .font(.caption)
@@ -256,10 +219,14 @@ struct RouteDetailView: View {
                     journeyCard(journey)
                 }
             }
+
+            Section {
+                earlierAndLater
+            }
         }
         .listStyle(.plain)
         .refreshable {
-            await calculator.calculateMultiple(route: route, departAt: departureTime)
+            await recalculate()
         }
     }
 
@@ -280,14 +247,16 @@ struct RouteDetailView: View {
             }
         } label: {
             HStack(spacing: 8) {
-                // Operator colour bars
+                // A bar per train: faint while all's well, coloured for a
+                // late or cancelled one.
                 HStack(spacing: 2) {
                     ForEach(journey.legs) { leg in
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(leg.service.operator?.brandColor ?? .secondary)
+                            .fill(legColor(leg))
                             .frame(width: 4, height: 44)
                     }
                 }
+                .accessibilityHidden(true)
 
                 HStack(spacing: 0) {
                 // Departure time
@@ -343,12 +312,12 @@ struct RouteDetailView: View {
                     if journey.hasIssues {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.delaySevere)
                     } else if maxDelay > 0 {
                         Text("+\(maxDelay)")
                             .font(.caption2)
                             .fontWeight(.bold)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.delay(minutes: maxDelay))
                     }
 
                     Image(systemName: "chevron.right")
@@ -392,36 +361,38 @@ struct RouteDetailView: View {
 
         // Track button
         if activeTracker == nil || activeTracker?.isTracking != true {
-            Button {
+            TrackButton(title: "Track This Journey", isTracking: false) {
                 startTracking(journey: journey)
-            } label: {
-                HStack {
-                    Image(systemName: "location.fill")
-                    Text("Track This Journey")
-                    Spacer()
-                }
-            }
-            .padding(.vertical, 4)
+            } stop: {}
         }
     }
 
-    @ViewBuilder
+    private func legColor(_ leg: CalculatedLeg) -> Color {
+        if leg.isCancelled { return .delaySevere }
+        if let delay = leg.departureDelay ?? leg.arrivalDelay, delay > 0 { return .delay(minutes: delay) }
+        return .secondary.opacity(0.12)
+    }
+
     private func legSummaryRow(_ leg: CalculatedLeg) -> some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             // Timeline dot
             Circle()
-                .fill(leg.isCancelled ? .red : .blue)
+                .fill(leg.isCancelled ? Color.delaySevere : .accentColor)
                 .frame(width: 8, height: 8)
+                .padding(.top, 5)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     if let headcode = leg.service.headcode {
-                        SplitFlapText(text: headcode, style: .caption)
+                        Text(headcode)
+                            .font(.caption.monospaced())
+                            .fontWeight(.semibold)
                     }
                     if let op = leg.service.operator {
                         Text(op.name)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                     if leg.isCancelled {
                         Text("CANCELLED")
@@ -430,55 +401,15 @@ struct RouteDetailView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(.red)
+                            .background(Color.delaySevere)
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                     }
                 }
-
-                HStack(spacing: 12) {
-                    // Departure
-                    HStack(spacing: 3) {
-                        Text(leg.originName)
-                            .font(.caption)
-                        if let time = leg.departureTime {
-                            Text(formatTimeShort(time))
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .monospacedDigit()
-                        }
-                        if let p = leg.departurePlatform {
-                            Text("P\(p)")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundStyle(.blue)
-                        }
-                    }
-
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 7))
-                        .foregroundStyle(.secondary)
-
-                    // Arrival
-                    HStack(spacing: 3) {
-                        Text(leg.destinationName)
-                            .font(.caption)
-                        if let time = leg.arrivalTime {
-                            Text(formatTimeShort(time))
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .monospacedDigit()
-                        }
-                        if let p = leg.arrivalPlatform {
-                            Text("P\(p)")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundStyle(.blue)
-                        }
-                    }
-                }
+                legStop(time: leg.departureTime, name: leg.originName, platform: leg.departurePlatform)
+                legStop(time: leg.arrivalTime, name: leg.destinationName, platform: leg.arrivalPlatform)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
             // Delay badge
             if let delay = leg.departureDelay ?? leg.arrivalDelay, delay > 0 {
@@ -487,12 +418,26 @@ struct RouteDetailView: View {
                     .fontWeight(.bold)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(delay >= 10 ? .red.opacity(0.15) : .orange.opacity(0.15))
-                    .foregroundStyle(delay >= 10 ? .red : .orange)
+                    .background(Color.delay(minutes: delay).opacity(0.15))
+                    .foregroundStyle(Color.delay(minutes: delay))
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
         }
         .opacity(leg.isCancelled ? 0.5 : 1.0)
+    }
+
+    /// One end of a train: time, station, platform.
+    private func legStop(time: String?, name: String, platform: String?) -> some View {
+        HStack(spacing: 6) {
+            Text(time.map { formatTimeShort($0) } ?? "--:--")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+            Text(name)
+                .font(.subheadline)
+                .lineLimit(1)
+            PlatformBadge(number: platform, compact: true)
+        }
     }
 
     @ViewBuilder
@@ -500,7 +445,7 @@ struct RouteDetailView: View {
         HStack(spacing: 8) {
             Image(systemName: "figure.walk")
                 .font(.caption2)
-                .foregroundStyle(minutes < 5 ? .orange : .green)
+                .foregroundStyle(minutes < 5 ? Color.delayModerate : Color.onTime)
             Text("Change at \(stationName) · \(minutes) min")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -518,7 +463,7 @@ struct RouteDetailView: View {
                     routeID: route.persistentModelID
                 )
             } catch {
-                trackingError = "Could not start tracking: \(error.localizedDescription)"
+                trackingError = "Couldn't start tracking: \(error.friendlyDescription)"
             }
         }
     }
@@ -541,12 +486,5 @@ struct RouteDetailView: View {
             return "\(hours)h \(mins)m"
         }
         return "\(mins)m"
-    }
-
-    private func formatDepartureTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE d MMM, HH:mm"
-        formatter.timeZone = TimeZone(identifier: "Europe/London")
-        return formatter.string(from: date)
     }
 }

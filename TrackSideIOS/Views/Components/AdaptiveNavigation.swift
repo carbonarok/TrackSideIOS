@@ -36,6 +36,7 @@ struct AdaptiveNavigation<Sidebar: View, Detail: View, Placeholder: View>: View 
             NavigationStack(path: $path) {
                 sidebar()
                     .navigationDestination(for: AppDestination.self, destination: destination)
+                    .environment(\.showDestination, ShowDestinationAction { path.append($0) })
             }
         }
     }
@@ -75,6 +76,7 @@ struct AdaptiveNavigation<Sidebar: View, Detail: View, Placeholder: View>: View 
     private var list: some View {
         sidebar()
             .environment(\.openDestination, OpenDestinationAction(selected: path.first) { path = [$0] })
+            .environment(\.showDestination, ShowDestinationAction { path = [$0] })
     }
 
     /// The selected item is the root of the detail column, so it has no
@@ -166,6 +168,13 @@ struct OpenDestinationAction {
     let open: (AppDestination) -> Void
 }
 
+/// Opens a destination from code rather than a row, such as a search
+/// result in a sheet: pushed on a phone, beside the list in a split.
+struct ShowDestinationAction {
+    let action: (AppDestination) -> Void
+    func callAsFunction(_ destination: AppDestination) { action(destination) }
+}
+
 extension View {
     /// Keeps content clear of the fold on this side. The crease is about 40
     /// points wide and a page split at its centre, so each side gives half.
@@ -176,6 +185,7 @@ extension View {
 
 extension EnvironmentValues {
     @Entry var openDestination: OpenDestinationAction?
+    @Entry var showDestination: ShowDestinationAction?
     /// Set when a page has the whole of an unfolded iPhone Duo: where the
     /// fold runs, in points from the page's leading edge. A page can then
     /// put one part of itself either side of it.

@@ -58,7 +58,7 @@ struct JourneyTimelineView: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 1)
-                                .background(.blue)
+                                .background(Color.accentColor)
                                 .clipShape(RoundedRectangle(cornerRadius: 4))
                         }
                     }
@@ -84,7 +84,7 @@ struct JourneyTimelineView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Circle()
-                            .fill(.green)
+                            .fill(Color.signalGreen)
                             .frame(width: 8, height: 8)
                         Text("Live Tracking")
                             .font(.subheadline)
@@ -93,7 +93,7 @@ struct JourneyTimelineView: View {
                     if let tracker, tracker.updatedLegs.contains(where: { $0.isCancelled }) {
                         Text("A train on this journey has been cancelled")
                             .font(.caption)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.delaySevere)
                     }
                 }
                 Spacer()
@@ -171,7 +171,7 @@ struct JourneyTimelineView: View {
                         Text(formatDuration(totalMins))
                             .font(.title3)
                             .fontWeight(.bold)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(.tint)
                     }
                 }
             }
@@ -189,7 +189,7 @@ struct JourneyTimelineView: View {
             if journey.hasIssues {
                 Label("Some trains on this journey are cancelled", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.delaySevere)
             }
         }
         .padding(.vertical, 4)
@@ -223,7 +223,7 @@ struct JourneyTimelineView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(.blue)
+                        .background(Color.accentColor)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                 } else {
                     connectionRiskBadge(minutes)
@@ -275,10 +275,10 @@ struct JourneyTimelineView: View {
     }
 
     private func connectionRiskColor(_ minutes: Int) -> Color {
-        if minutes < 3 { return .red }
-        if minutes < 5 { return .orange }
+        if minutes < 3 { return .delaySevere }
+        if minutes < 5 { return .delayModerate }
         if minutes < 8 { return .yellow }
-        return .green
+        return .signalGreen
     }
 
     // MARK: - Leg Row
@@ -291,7 +291,7 @@ struct JourneyTimelineView: View {
                 // Timeline dot
                 VStack(spacing: 0) {
                     Circle()
-                        .fill(.green)
+                        .fill(Color.signalGreen)
                         .frame(width: 12, height: 12)
                     Rectangle()
                         .fill(.secondary.opacity(0.3))
@@ -323,8 +323,8 @@ struct JourneyTimelineView: View {
                                 .fontWeight(.bold)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
-                                .background(delay >= 10 ? .red.opacity(0.15) : .orange.opacity(0.15))
-                                .foregroundStyle(delay >= 10 ? .red : .orange)
+                                .background(Color.delay(minutes: delay).opacity(0.15))
+                                .foregroundStyle(Color.delay(minutes: delay))
                                 .clipShape(RoundedRectangle(cornerRadius: 4))
                         }
                     }
@@ -372,12 +372,12 @@ struct JourneyTimelineView: View {
                         if let liveStop = detail.stops.last(where: { $0.atPlatform == true }) {
                             Text("At \(liveStop.name)")
                                 .font(.caption2)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(Color.onTime)
                                 .fontWeight(.semibold)
                         } else if let liveStop = detail.stops.last(where: { $0.approaching == true }) {
                             Text("Approaching \(liveStop.name)")
                                 .font(.caption2)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(.tint)
                                 .fontWeight(.semibold)
                         }
                     }
@@ -435,8 +435,8 @@ struct JourneyTimelineView: View {
                                 .fontWeight(.bold)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
-                                .background(delay >= 10 ? .red.opacity(0.15) : .orange.opacity(0.15))
-                                .foregroundStyle(delay >= 10 ? .red : .orange)
+                                .background(Color.delay(minutes: delay).opacity(0.15))
+                                .foregroundStyle(Color.delay(minutes: delay))
                                 .clipShape(RoundedRectangle(cornerRadius: 4))
                         }
                     }
@@ -460,8 +460,8 @@ struct JourneyTimelineView: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(.blue.opacity(0.1))
-        .foregroundStyle(.blue)
+        .background(Color.accentColor.opacity(0.1))
+        .foregroundStyle(.tint)
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 

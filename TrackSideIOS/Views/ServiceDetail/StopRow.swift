@@ -71,7 +71,7 @@ struct StopRow: View {
 
                 if isCurrentPosition || stop.atPlatform == true {
                     Circle()
-                        .stroke(Color.blue, lineWidth: 2)
+                        .stroke(Color.accentColor, lineWidth: 2)
                         .frame(width: indicatorSize + 6, height: indicatorSize + 6)
                 }
             }
@@ -129,23 +129,23 @@ struct StopRow: View {
                 if stop.atPlatform == true {
                     Label("At platform", systemImage: "tram.fill")
                         .font(.caption2)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
                 } else if stop.approaching == true {
                     Label("Approaching", systemImage: "arrow.right.circle.fill")
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.delayModerate)
                 }
 
                 if stop.startsHere == true {
                     Text("Starts here")
                         .font(.caption2)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.onTime)
                 }
 
                 if stop.terminatesHere == true {
                     Text("Terminates here")
                         .font(.caption2)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.delaySevere)
                 }
             }
         }
@@ -158,7 +158,7 @@ struct StopRow: View {
         if isPassed && !isKeyStop {
             Image(systemName: "checkmark")
                 .font(.caption)
-                .foregroundStyle(.green.opacity(0.6))
+                .foregroundStyle(Color.signalGreen.opacity(0.6))
         }
     }
 
@@ -169,14 +169,14 @@ struct StopRow: View {
     }
 
     private var indicatorColor: Color {
-        if stop.cancelled { return .red }
-        if stop.atPlatform == true { return .blue }
-        if stop.approaching == true { return .orange }
-        if isCurrentPosition { return .blue }
-        if stop.kind == .origin || stop.startsHere == true { return .green }
-        if stop.kind == .destination || stop.terminatesHere == true { return .red }
+        if stop.cancelled { return .delaySevere }
+        if stop.atPlatform == true { return .accentColor }
+        if stop.approaching == true { return .delayModerate }
+        if isCurrentPosition { return .accentColor }
+        if stop.kind == .origin || stop.startsHere == true { return .signalGreen }
+        if stop.kind == .destination || stop.terminatesHere == true { return .accentColor }
         if stop.kind == .pass { return .secondary.opacity(0.3) }
-        if isPassed { return .green.opacity(0.6) }
+        if isPassed { return Color.signalGreen.opacity(0.6) }
         return .secondary.opacity(0.5)
     }
 
@@ -187,12 +187,12 @@ struct StopRow: View {
     }
 
     private var lineColorAbove: Color {
-        if isPassed || isCurrentPosition { return .green.opacity(0.5) }
+        if isPassed || isCurrentPosition { return Color.signalGreen.opacity(0.5) }
         return .secondary.opacity(0.2)
     }
 
     private var lineColorBelow: Color {
-        if isPassed && !isCurrentPosition { return .green.opacity(0.5) }
+        if isPassed && !isCurrentPosition { return Color.signalGreen.opacity(0.5) }
         return .secondary.opacity(0.2)
     }
 }

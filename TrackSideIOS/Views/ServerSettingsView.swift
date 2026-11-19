@@ -15,8 +15,18 @@ struct ServerSettingsView: View {
         case idle, checking, connected, failed(String)
     }
 
+    /// The first launch, rather than Settings: welcome them first.
+    private var isWelcome: Bool { onSaved != nil }
+
     var body: some View {
         Form {
+            if isWelcome {
+                Section {
+                    welcome
+                }
+                .listRowBackground(Color.clear)
+            }
+
             Section {
                 TextField("trains.example.com", text: $address)
                     .keyboardType(.URL)
@@ -39,29 +49,43 @@ struct ServerSettingsView: View {
                 Button {
                     Task { await connect() }
                 } label: {
-                    HStack {
-                        Text("Connect")
-                        Spacer()
+                    HStack(spacing: 8) {
                         if status == .checking {
                             ProgressView()
+                                .tint(.white)
                         }
+                        Text(status == .checking ? "Connecting…" : "Connect")
+                            .fontWeight(.semibold)
                     }
+                    .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
                 .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || status == .checking)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
             } footer: {
                 switch status {
                 case .connected:
                     Label("Connected", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.onTime)
                 case .failed(let message):
                     Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.delaySevere)
                 default:
                     EmptyView()
                 }
             }
         }
-        .navigationTitle("Server")
+        .navigationTitle(isWelcome ? "" : "Server")
+        .navigationBarTitleDisplayMode(isWelcome ? .inline : .automatic)
+        .sensoryFeedback(trigger: status) { _, new in
+            switch new {
+            case .connected: .success
+            case .failed: .error
+            default: nil
+            }
+        }
         .onChange(of: address) { status = .idle }
         .onChange(of: apiKey) { status = .idle }
     }
@@ -81,19 +105,63 @@ struct ServerSettingsView: View {
                 : "The server didn't accept that API key.")
             return
         } catch APIError.httpError(let code, _) {
-            status = .failed("The server answered with error \(code). Is this a trackside server?")
+            status = .failed(code == 404
+                ? "Something answered at that address, but it isn't a trackside server. Check the address, including any path after the name."
+                : "The server ran into a problem (error \(code)). Try again in a moment.")
             return
         } catch APIError.decodingError {
             status = .failed("That server answered, but not like a trackside server.")
             return
         } catch {
-            status = .failed("Couldn't reach the server: \(error.localizedDescription)")
+            status = .failed(error.friendlyDescription)
             return
         }
         ServerSettings.save(server)
         status = .connected
         WidgetCenter.shared.reloadAllTimelines()
         onSaved?()
+    }
+}
+
+private extension ServerSettingsView {
+    var welcome: some View {
+        VStack(spacing: 14) {
+            Image("AppLogo")
+                .resizable()
+                .frame(width: 96, height: 96)
+                .clipShape(RoundedRectangle(cornerRadius: 22))
+                .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
+                .accessibilityHidden(true)
+            Text("Welcome to TrackSide")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 12) {
+                feature("clock", "Live departures and arrivals for any station")
+                feature("arrow.triangle.swap", "Your regular journeys, with every connection worked out")
+                feature("location.fill", "Live Activities that follow your train to the platform")
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+    }
+
+    func feature(_ symbol: String, _ text: String) -> some View {
+        Label {
+            Text(text)
+                .font(.subheadline)
+        } icon: {
+            Image(systemName: symbol)
+                .foregroundStyle(.tint)
+                .frame(width: 24)
+        }
+    }
+}
+
+#Preview("Welcome") {
+    NavigationStack {
+        ServerSettingsView(onSaved: {})
     }
 }
 

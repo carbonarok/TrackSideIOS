@@ -28,7 +28,7 @@ final class ServiceDetailService {
             isLoading = false
             await subscribeLive(uid: uid, date: date)
         } catch {
-            self.error = error.localizedDescription
+            self.error = error.friendlyDescription
             isLoading = false
         }
     }

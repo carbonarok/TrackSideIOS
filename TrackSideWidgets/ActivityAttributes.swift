@@ -53,6 +53,14 @@ nonisolated struct LegActivityAttributes: ActivityAttributes {
     let originName: String
     let destinationName: String
     let operatorName: String
+    /// The train after this one, as planned: "17:15 to Guildford". Nil on
+    /// the last train.
+    var nextTrain: String? = nil
+    var nextTrainPlatform: String? = nil
+    /// Where the whole journey ends and when it's due, on a journey of
+    /// more than one train.
+    var finalDestinationName: String? = nil
+    var finalArrival: String? = nil
 
     struct ContentState: Codable, Hashable {
         let phase: String               // "upcoming", "boarding", "onTrain", "arrived"

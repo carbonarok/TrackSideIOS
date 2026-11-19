@@ -98,7 +98,13 @@ final class JourneyTracker {
                 runDate: leg.service.runDate,
                 originName: leg.originName,
                 destinationName: leg.destinationName,
-                operatorName: leg.service.operator?.name ?? ""
+                operatorName: leg.service.operator?.name ?? "",
+                nextTrain: journey.legs[safe: index + 1].map { next in
+                    [clockTime(next.departureTime), "to \(next.destinationName)"].compactMap { $0 }.joined(separator: " ")
+                },
+                nextTrainPlatform: journey.legs[safe: index + 1]?.departurePlatform,
+                finalDestinationName: journey.totalLegs > 1 ? journey.legs.last?.destinationName : nil,
+                finalArrival: journey.totalLegs > 1 ? clockTime(journey.arrivalTime) : nil
             )
             let state = buildLegState(for: index)
             let staleDate = state.departureDate?.addingTimeInterval(900) ?? Date().addingTimeInterval(900)

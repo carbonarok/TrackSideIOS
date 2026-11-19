@@ -57,7 +57,7 @@ final class DepartureBoardService {
         } catch {
             guard isCurrent(code: code, mode: mode) else { return }
             if board == nil {
-                self.error = error.localizedDescription
+                self.error = error.friendlyDescription
             }
             // If we have cached data, keep showing it
             isLoading = false

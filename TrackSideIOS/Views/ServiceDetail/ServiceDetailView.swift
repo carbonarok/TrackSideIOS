@@ -21,20 +21,14 @@ struct ServiceDetailView: View {
             if let detail = service.detail {
                 serviceContent(detail)
             } else if let error = service.error {
-                ContentUnavailableView {
-                    Label("Error", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error)
-                } actions: {
-                    Button("Retry") {
-                        Task { await service.loadService(uid: uid, date: runDate) }
-                    }
+                ProblemView(title: "Can't Load This Train", message: error) {
+                    Task { await service.loadService(uid: uid, date: runDate) }
                 }
             } else {
                 // Shown from the start, before loading begins as well as
                 // during it. With nothing to show, the group is empty and
                 // `.task` never runs, so the page stays blank.
-                ProgressView("Loading service...")
+                LoadingRows(kind: .train)
             }
         }
         .task {
@@ -42,6 +36,9 @@ struct ServiceDetailView: View {
         }
         .onDisappear {
             service.stopLive()
+        }
+        .sensoryFeedback(trigger: journeyManager.isTracking) { _, tracking in
+            tracking ? .success : .impact(weight: .light)
         }
         .alert("Tracking Error", isPresented: .init(
             get: { trackingError != nil },
@@ -232,19 +229,14 @@ struct ServiceDetailView: View {
     @ViewBuilder
     private func headerView(_ detail: ServiceDetail) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Operator color accent bar
-            if let op = detail.operator {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(op.brandColor)
-                    .frame(height: 4)
-            }
-
             // Headcode, status, operator
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         if let headcode = detail.headcode {
-                            SplitFlapText(text: headcode, style: .title, weight: .bold)
+                            Text(headcode)
+                                .font(.title.monospaced())
+                                .fontWeight(.bold)
                         }
                         Text(detail.uid)
                             .font(.caption)
@@ -288,8 +280,7 @@ struct ServiceDetailView: View {
                         .font(.caption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(op.brandColor.opacity(0.12))
-                        .foregroundStyle(op.brandColor)
+                        .background(.secondary.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 if let powerType = detail.powerType {
@@ -361,13 +352,13 @@ struct ServiceDetailView: View {
                         .fontWeight(.bold)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(delay >= 10 ? .red.opacity(0.15) : delay >= 5 ? .orange.opacity(0.15) : .yellow.opacity(0.15))
-                        .foregroundStyle(delay >= 10 ? .red : delay >= 5 ? .orange : .yellow)
+                        .background(Color.delay(minutes: delay).opacity(0.15))
+                        .foregroundStyle(Color.delay(minutes: delay))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 } else if hasArrived {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.onTime)
                 }
             }
             .padding(12)
@@ -413,11 +404,11 @@ struct ServiceDetailView: View {
                 if let currentStop = detail.stops.last(where: { $0.atPlatform == true }) {
                     Label("At \(currentStop.name)", systemImage: "tram.fill")
                         .font(.caption)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
                 } else if let approaching = detail.stops.last(where: { $0.approaching == true }) {
                     Label("Approaching \(approaching.name)", systemImage: "arrow.right.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.delayModerate)
                 } else if stats.passed > 0 {
                     Text("\(stats.passed) of \(stats.total) stops completed")
                         .font(.caption)
@@ -433,7 +424,7 @@ struct ServiceDetailView: View {
                 } else if detail.status == .terminated {
                     Text("Journey complete")
                         .font(.caption)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.onTime)
                 }
             }
         }
@@ -453,7 +444,7 @@ struct ServiceDetailView: View {
                 value: duration.map { formatDuration($0) } ?? "--",
                 label: "Duration",
                 icon: "clock",
-                color: .blue
+                color: .accentColor
             )
 
             Divider()
@@ -464,7 +455,7 @@ struct ServiceDetailView: View {
                 value: "\(stats.total)",
                 label: stats.total == 1 ? "Stop" : "Stops",
                 icon: "mappin.circle",
-                color: .purple
+                color: .accentColor
             )
 
             Divider()
@@ -472,10 +463,10 @@ struct ServiceDetailView: View {
 
             // Delay
             statCell(
-                value: delay > 0 ? "+\(delay)" : "0",
-                label: delay > 0 ? "Min Late" : "On Time",
+                value: delay > 0 ? "+\(delay)m" : "On time",
+                label: delay > 0 ? "Late" : "Status",
                 icon: delay > 0 ? "clock.badge.exclamationmark" : "checkmark.circle",
-                color: delay > 0 ? (delay >= 10 ? .red : .orange) : .green
+                color: delay > 0 ? .delay(minutes: delay) : .onTime
             )
         }
         .padding(.vertical, 4)
@@ -500,48 +491,18 @@ struct ServiceDetailView: View {
 
     // MARK: - Track Button
 
-    @ViewBuilder
     private func trackButton(_ detail: ServiceDetail) -> some View {
-        let isTracking = journeyManager.isTracking
-
-        Button {
-            if isTracking {
-                journeyManager.stopTracking()
-            } else {
-                Task {
-                    do {
-                        let journey = buildJourney(from: detail)
-                        try await journeyManager.startTracking(journey: journey)
-                    } catch {
-                        trackingError = "Could not start tracking: \(error.localizedDescription)"
-                    }
+        TrackButton(title: "Track This Train", isTracking: journeyManager.isTracking) {
+            Task {
+                do {
+                    try await journeyManager.startTracking(journey: buildJourney(from: detail))
+                } catch {
+                    trackingError = "Couldn't start tracking: \(error.friendlyDescription)"
                 }
             }
-        } label: {
-            HStack {
-                Image(systemName: isTracking ? "stop.circle.fill" : "location.fill")
-                    .foregroundStyle(isTracking ? .red : .blue)
-                Text(isTracking ? "Stop Tracking" : "Track This Train")
-                    .fontWeight(.medium)
-                Spacer()
-                if isTracking {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 6, height: 6)
-                        Text("Live")
-                            .font(.caption2)
-                            .foregroundStyle(.green)
-                    }
-                } else {
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+        } stop: {
+            journeyManager.stopTracking()
         }
-        .tint(.primary)
-        .padding(.vertical, 4)
     }
 
     /// Build a single-leg CalculatedJourney from a ServiceDetail for ad-hoc tracking
@@ -604,7 +565,7 @@ struct ServiceDetailView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: associationIcon(assoc.type))
-                    .foregroundStyle(assoc.cancelled ? .red : .blue)
+                    .foregroundStyle(assoc.cancelled ? Color.delaySevere : .accentColor)
                     .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -630,7 +591,7 @@ struct ServiceDetailView: View {
                     if assoc.cancelled {
                         Text("Cancelled")
                             .font(.caption2)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.delaySevere)
                     }
                 }
 
@@ -649,7 +610,7 @@ struct ServiceDetailView: View {
             if let cancelReason = detail.cancelReason {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.delaySevere)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Cancellation Reason")
                             .font(.caption)
@@ -662,7 +623,7 @@ struct ServiceDetailView: View {
             if let lateReason = detail.lateReason {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "clock.badge.exclamationmark")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.delayModerate)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Delay Reason")
                             .font(.caption)
@@ -748,9 +709,9 @@ struct ServiceDetailView: View {
     }
 
     private func progressColor(delay: Int?) -> Color {
-        guard let delay, delay > 0 else { return .green }
-        if delay >= 10 { return .red }
-        if delay >= 5 { return .orange }
+        guard let delay, delay > 0 else { return .signalGreen }
+        if delay >= 10 { return .delaySevere }
+        if delay >= 5 { return .delayModerate }
         return .yellow
     }
 

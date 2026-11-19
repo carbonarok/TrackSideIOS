@@ -1,50 +1,83 @@
 import SwiftUI
 
-/// Displays platform information with visual indicators for changes/confirmation
+/// A platform, the same everywhere in the app: a small "PLAT" over the
+/// number, on a tinted chip. Amber once it has changed, the accent colour
+/// once confirmed, grey while it's only the booked platform. A dashed
+/// outline means it's planned but not yet on the station's screens: big
+/// stations hold platforms back until shortly before departure.
 struct PlatformBadge: View {
-    let platform: Platform?
+    let number: String?
+    var changed = false
+    var confirmed = false
+    var unannounced = false
+    /// Smaller, for a line of text such as a journey's legs.
+    var compact = false
+
+    init(platform: Platform?, compact: Bool = false) {
+        self.number = platform?.displayPlatform
+        self.changed = platform?.changed == true
+        self.confirmed = platform?.confirmed == true
+        self.unannounced = platform?.suppressed == true
+        self.compact = compact
+    }
+
+    init(number: String?, compact: Bool = false) {
+        self.number = number
+        self.compact = compact
+    }
 
     var body: some View {
-        if let platformText = platform?.displayPlatform {
-            HStack(spacing: 2) {
-                Text("Plat")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                SplitFlapText(text: platformText, style: .caption, color: tileInk)
+        if let number, !number.isEmpty {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text("PLAT")
+                    .font(.system(.caption2, design: .rounded).weight(.semibold))
+                    .opacity(0.75)
+                Text(number)
+                    .font(.system(compact ? .caption : .subheadline, design: .rounded).weight(.bold))
+                    .monospacedDigit()
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(backgroundColor)
-            .foregroundStyle(foregroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, compact ? 5 : 7)
+            .padding(.vertical, compact ? 1 : 3)
+            .background(background, in: RoundedRectangle(cornerRadius: compact ? 5 : 7))
+            .overlay {
+                if unannounced {
+                    RoundedRectangle(cornerRadius: compact ? 5 : 7)
+                        .strokeBorder(foreground.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                }
+            }
+            .fixedSize()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityText(number))
         }
     }
 
-    /// The platform number's colour on its dark tile: amber when it has
-    /// changed, blue once confirmed.
-    private var tileInk: Color {
-        if platform?.changed == true { return SplitFlap.late }
-        if platform?.confirmed == true { return Color(red: 0.55, green: 0.8, blue: 1.0) }
-        return SplitFlap.ink
-    }
-
-    private var backgroundColor: Color {
-        if platform?.changed == true {
-            return .orange.opacity(0.15)
-        }
-        if platform?.confirmed == true {
-            return .blue.opacity(0.1)
-        }
-        return .secondary.opacity(0.1)
-    }
-
-    private var foregroundColor: Color {
-        if platform?.changed == true {
-            return .delayModerate
-        }
-        if platform?.confirmed == true {
-            return .platformConfirmed
-        }
+    private var foreground: Color {
+        if changed { return .delayModerate }
+        if confirmed { return .accentColor }
         return .primary
     }
+
+    private var background: Color {
+        if unannounced { return .clear }
+        if changed { return Color.delayModerate.opacity(0.14) }
+        if confirmed { return Color.accentColor.opacity(0.12) }
+        return Color.secondary.opacity(0.12)
+    }
+
+    private func accessibilityText(_ number: String) -> String {
+        if unannounced && changed { return "Platform \(number), changed, not yet announced" }
+        if unannounced { return "Platform \(number), not yet announced" }
+        if changed { return "Platform \(number), changed" }
+        if confirmed { return "Platform \(number), confirmed" }
+        return "Platform \(number)"
+    }
+}
+
+#Preview {
+    VStack(spacing: 12) {
+        PlatformBadge(number: "7")
+        PlatformBadge(number: "12", compact: true)
+    }
+    .padding()
 }

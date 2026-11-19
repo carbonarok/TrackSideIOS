@@ -13,7 +13,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 NOW = datetime.now(timezone.utc).replace(second=0, microsecond=0)
 
@@ -29,11 +29,16 @@ def train(i):
     run = dep.date().isoformat()
     op = {"code": "SW", "name": "South Western Railway"}
 
+    # The second train runs a few minutes late, to show delays.
+    late = 4 if i == 1 else 0
+
     def stop(code, name, kind, dep_t=None, arr_t=None, plat="1"):
         s = {"tiploc": code, "crs": code, "name": name, "kind": kind, "cancelled": False,
              "platform": {"planned": plat, "changed": False, "confirmed": True}}
         if dep_t:
             s["departure"] = {"public": iso(dep_t)}
+            if late:
+                s["departure"].update(estimated=iso(dep_t + timedelta(minutes=late)), delayMinutes=late, delayed=True)
         if arr_t:
             s["arrival"] = {"public": iso(arr_t)}
         return s
@@ -74,6 +79,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send({"location": {"tiploc": code, "crs": code, "name": code},
                               "from": iso(NOW), "to": iso(NOW + timedelta(hours=2)),
                               "messages": [], "services": services})
+        if parts == ["v1", "locations"]:
+            # Station search, and the app's check that this is a trackside server.
+            return self.send({"locations": [
+                {"tiploc": "CLPHMJC", "crs": "CLJ", "name": "Clapham Junction"},
+                {"tiploc": "WOKING", "crs": "WOK", "name": "Woking"},
+            ]})
+        if parts == ["v1", "services"]:
+            q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0].upper()
+            summaries = [{k: v for k, v in d.items() if k not in ("stops", "source")} for _, _, d in TRAINS]
+            return self.send({"services": [t for t in summaries if t["headcode"].startswith(q)]})
         if parts[:2] == ["v1", "services"] and len(parts) == 4:
             for uid, _, detail in TRAINS:
                 if uid == parts[2]:

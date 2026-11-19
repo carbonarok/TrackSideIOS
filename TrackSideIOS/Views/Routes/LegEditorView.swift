@@ -25,7 +25,7 @@ struct LegEditorView: View {
             Button(action: onSearchOrigin) {
                 if originName.isEmpty {
                     Text("Select station")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
                 } else {
                     VStack(alignment: .trailing) {
                         Text(originName)
@@ -55,7 +55,7 @@ struct LegEditorView: View {
             Button(action: onSearchDestination) {
                 if destinationName.isEmpty {
                     Text("Select station")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
                 } else {
                     VStack(alignment: .trailing) {
                         Text(destinationName)
@@ -104,7 +104,7 @@ struct LegEditorView: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(.blue.opacity(0.1))
+                        .background(Color.accentColor.opacity(0.1))
                         .clipShape(Capsule())
                     }
                 }

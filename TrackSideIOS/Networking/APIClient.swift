@@ -11,15 +11,43 @@ nonisolated enum APIError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Invalid URL"
+            return "That server address isn't valid. Check it in Settings → Server."
         case .notConfigured:
-            return "No server set up. Add one in Settings → Server."
-        case .httpError(let code, let message):
-            return "HTTP \(code): \(message)"
-        case .decodingError(let detail):
-            return "Decoding error: \(detail)"
+            return "Add your trackside server in Settings to see train times."
+        case .httpError(let code, _) where code == 401 || code == 403:
+            return "The server didn't accept the API key. Check it in Settings → Server."
+        case .httpError(let code, _) where code == 404:
+            return "The server doesn't know about this. It may not have the timetable for it yet."
+        case .httpError(let code, _) where code >= 500:
+            return "The server ran into a problem. Try again in a moment."
+        case .httpError(let code, _):
+            return "The server turned the request down (error \(code))."
+        case .decodingError:
+            return "The server's answer didn't make sense. It may need updating."
         case .networkError(let detail):
             return detail
+        }
+    }
+}
+
+extension Error {
+    /// What went wrong, in words for the person using the app rather than
+    /// a developer: no error codes, and what to do about it where possible.
+    nonisolated var friendlyDescription: String {
+        guard let urlError = self as? URLError else { return localizedDescription }
+        switch urlError.code {
+        case .notConnectedToInternet, .dataNotAllowed:
+            return "You're offline. Times will update when you're back online."
+        case .timedOut:
+            return "The server took too long to answer. Try again in a moment."
+        case .cannotFindHost, .dnsLookupFailed:
+            return "Couldn't find the server. Check its address in Settings → Server."
+        case .cannotConnectToHost, .networkConnectionLost:
+            return "Couldn't reach the server. It may be down, or you may be on a network that blocks it."
+        case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate, .serverCertificateNotYetValid:
+            return "Couldn't connect securely to the server. Its certificate may have expired."
+        default:
+            return urlError.localizedDescription
         }
     }
 }

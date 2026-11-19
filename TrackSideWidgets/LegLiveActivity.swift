@@ -10,6 +10,7 @@ struct LegLiveActivity: Widget {
         } dynamicIsland: { context in
             let state = context.state
             let attrs = context.attributes
+            let display = LiveActivityDisplay.current
 
             return DynamicIsland {
                 // MARK: - Expanded
@@ -26,17 +27,21 @@ struct LegLiveActivity: Widget {
                                 .foregroundStyle(.secondary)
                         }
 
-                        delayBadge(state)
+                        if display.showDelayBadge || state.isCancelled {
+                            delayBadge(state)
+                        }
                     }
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
-                    HStack(spacing: 6) {
-                        if let p = state.departurePlatform {
-                            compactPlatform("D", p, state.departurePlatformChanged)
-                        }
-                        if let p = state.arrivalPlatform {
-                            compactPlatform("A", p, state.arrivalPlatformChanged)
+                    if display.showPlatformBadge {
+                        HStack(spacing: 6) {
+                            if let p = state.departurePlatform {
+                                compactPlatform("D", p, state.departurePlatformChanged)
+                            }
+                            if let p = state.arrivalPlatform {
+                                compactPlatform("A", p, state.arrivalPlatformChanged)
+                            }
                         }
                     }
                 }
@@ -56,13 +61,14 @@ struct LegLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
+                  VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         if state.isCancelled {
                             Text("CANCELLED")
                                 .font(.caption2)
                                 .fontWeight(.bold)
                                 .foregroundStyle(.red)
-                        } else if state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
+                        } else if display.showCountdown, state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
                             HStack(spacing: 4) {
                                 Image(systemName: "clock")
                                     .font(.caption2)
@@ -72,11 +78,11 @@ struct LegLiveActivity: Widget {
                             }
                             .foregroundStyle(.blue)
                         } else if state.phase == "boarding" {
-                            Text("Departing")
+                            Text(departingLabel(state, now: "Departing"))
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundStyle(.blue)
-                        } else if state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
+                        } else if display.showCountdown, state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
                             HStack(spacing: 4) {
                                 Image(systemName: "clock")
                                     .font(.caption2)
@@ -88,7 +94,7 @@ struct LegLiveActivity: Widget {
                             }
                             .foregroundStyle(.green)
                         } else if state.phase == "onTrain" {
-                            Text("Arriving")
+                            Text(arrivingLabel(state, now: "Arriving"))
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundStyle(.green)
@@ -130,6 +136,11 @@ struct LegLiveActivity: Widget {
                             }
                         }
                     }
+                    if display.showProgressBar {
+                        LegProgressBar(state: state)
+                    }
+                    LegExtras(attrs: attrs, display: display)
+                  }
                 }
 
             } compactLeading: {
@@ -151,15 +162,15 @@ struct LegLiveActivity: Widget {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption2)
                         .foregroundStyle(.green)
-                } else if state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
+                } else if display.showCountdown, state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
                     Text(depDate, style: .timer)
                         .compactIslandText()
                         .frame(maxWidth: 56)
-                } else if let maxDelay = [state.departureDelayMinutes, state.arrivalDelayMinutes].max(), maxDelay > 0 {
+                } else if display.showDelayBadge, let maxDelay = [state.departureDelayMinutes, state.arrivalDelayMinutes].max(), maxDelay > 0 {
                     Text("+\(maxDelay)m")
                         .compactIslandText()
                         .foregroundStyle(.orange)
-                } else if let p = state.phase == "boarding" ? state.departurePlatform : state.arrivalPlatform {
+                } else if display.showPlatformBadge, let p = state.phase == "boarding" ? state.departurePlatform : state.arrivalPlatform {
                     Text("P\(p)")
                         .compactIslandText()
                 } else {
@@ -241,6 +252,8 @@ private struct LegLockScreenView: View {
 
     private var state: LegActivityAttributes.ContentState { context.state }
     private var attrs: LegActivityAttributes { context.attributes }
+    /// Read once per drawing, from the switches in the app's Settings.
+    private let display = LiveActivityDisplay.current
 
     var body: some View {
         switch activityFamily {
@@ -274,7 +287,7 @@ private struct LegLockScreenView: View {
                             .font(.caption2)
                             .fontWeight(.bold)
                             .foregroundStyle(.red)
-                    } else if delay > 0 {
+                    } else if display.showDelayBadge, delay > 0 {
                         Text("+\(delay)")
                             .font(.caption)
                             .fontWeight(.bold)
@@ -283,16 +296,16 @@ private struct LegLockScreenView: View {
                 }
 
                 // Countdown or status
-                if state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
+                if display.showCountdown, state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
                     Text(depDate, style: .relative)
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(.blue)
                 } else if state.phase == "boarding" {
-                    Text("Departing")
+                    Text(departingLabel(state, now: "Departing"))
                         .font(.caption2)
                         .foregroundStyle(.blue)
-                } else if state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
+                } else if display.showCountdown, state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
                     HStack(spacing: 2) {
                         Text("Arr")
                             .font(.system(size: 9))
@@ -302,7 +315,7 @@ private struct LegLockScreenView: View {
                     .font(.caption2)
                     .foregroundStyle(.green)
                 } else if state.phase == "onTrain" {
-                    Text("Arriving")
+                    Text(arrivingLabel(state, now: "Arriving"))
                         .font(.caption2)
                         .foregroundStyle(.green)
                 } else if state.phase == "upcoming" {
@@ -320,7 +333,7 @@ private struct LegLockScreenView: View {
 
             // Right: platforms
             HStack(spacing: 4) {
-                if let p = state.departurePlatform {
+                if display.showPlatformBadge, let p = state.departurePlatform {
                     VStack(spacing: 0) {
                         Text("D")
                             .font(.system(size: 7, weight: .medium))
@@ -337,7 +350,7 @@ private struct LegLockScreenView: View {
                             .fill(state.departurePlatformChanged ? Color.red.opacity(0.15) : Color.blue.opacity(0.1))
                     )
                 }
-                if let p = state.arrivalPlatform {
+                if display.showPlatformBadge, let p = state.arrivalPlatform {
                     VStack(spacing: 0) {
                         Text("A")
                             .font(.system(size: 7, weight: .medium))
@@ -365,6 +378,7 @@ private struct LegLockScreenView: View {
     // MARK: - Wide Layout (unfolded iPhone Duo)
 
     private var wideLayout: some View {
+      VStack(alignment: .leading, spacing: 10) {
         HStack(alignment: .center, spacing: 24) {
             endpoint(
                 label: "Departs",
@@ -381,10 +395,12 @@ private struct LegLockScreenView: View {
                     Text(attrs.headcode)
                         .font(.headline)
                         .fontWeight(.bold)
-                    Text(attrs.operatorName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    if display.showOperatorName {
+                        Text(attrs.operatorName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 HStack(spacing: 6) {
                     Rectangle().fill(.secondary.opacity(0.4)).frame(height: 1)
@@ -411,6 +427,11 @@ private struct LegLockScreenView: View {
                 alignment: .trailing
             )
         }
+        if display.showProgressBar {
+            LegProgressBar(state: state)
+        }
+        LegExtras(attrs: attrs, display: display)
+      }
         .padding(16)
         // Only where it has this much room; otherwise the phone layout.
         .frame(minWidth: 560)
@@ -423,12 +444,12 @@ private struct LegLockScreenView: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.red)
-        } else if state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
+        } else if display.showCountdown, state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
             Text("Leaves \(depDate, style: .relative)")
                 .font(.subheadline)
                 .monospacedDigit()
                 .foregroundStyle(.blue)
-        } else if state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
+        } else if display.showCountdown, state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
             Text("Arrives \(arrDate, style: .relative)")
                 .font(.subheadline)
                 .monospacedDigit()
@@ -437,7 +458,7 @@ private struct LegLockScreenView: View {
             Text("Arrived")
                 .font(.subheadline)
                 .foregroundStyle(.green)
-        } else if let delay = [state.departureDelayMinutes, state.arrivalDelayMinutes].max(), delay > 0 {
+        } else if display.showDelayBadge, let delay = [state.departureDelayMinutes, state.arrivalDelayMinutes].max(), delay > 0 {
             Text("\(delay) min late")
                 .font(.subheadline)
                 .foregroundStyle(.orange)
@@ -479,7 +500,7 @@ private struct LegLockScreenView: View {
             .font(.title2)
             .fontWeight(.bold)
             .monospacedDigit()
-            if let platform {
+            if display.showPlatformBadge, let platform {
                 Text("Platform \(platform)")
                     .font(.caption)
                     .fontWeight(.semibold)
@@ -504,8 +525,16 @@ private struct LegLockScreenView: View {
             }
             .padding(.bottom, 4)
 
+            if display.showProgressBar {
+                LegProgressBar(state: state)
+                    .padding(.vertical, 4)
+            }
+
             // Bottom: arrival time
             bottomRow
+
+            LegExtras(attrs: attrs, display: display)
+                .padding(.top, 6)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -564,7 +593,7 @@ private struct LegLockScreenView: View {
                 .lineLimit(2)
 
             // Countdown — only show timer when the target date is still in the future
-            if state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
+            if display.showCountdown, state.phase == "boarding", let depDate = state.departureDate, depDate > state.lastUpdated {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
                         .font(.caption)
@@ -580,12 +609,12 @@ private struct LegLockScreenView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "train.side.front.car")
                         .font(.caption)
-                    Text("Departing now")
+                    Text(departingLabel(state, now: "Departing now"))
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
                 .foregroundStyle(.blue)
-            } else if state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
+            } else if display.showCountdown, state.phase == "onTrain", let arrDate = state.arrivalDate, arrDate > state.lastUpdated {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
                         .font(.caption)
@@ -601,7 +630,7 @@ private struct LegLockScreenView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "train.side.front.car")
                         .font(.caption)
-                    Text("Arriving now")
+                    Text(arrivingLabel(state, now: "Arriving now"))
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
@@ -620,7 +649,7 @@ private struct LegLockScreenView: View {
             let delay = max(state.departureDelayMinutes, state.arrivalDelayMinutes)
             if state.isCancelled {
                 cancelledBadge
-            } else if delay > 0 {
+            } else if display.showDelayBadge, delay > 0 {
                 Text("+\(delay) min late")
                     .font(.caption)
                     .fontWeight(.bold)
@@ -681,14 +710,14 @@ private struct LegLockScreenView: View {
     @ViewBuilder
     private var platformSection: some View {
         HStack(spacing: 6) {
-            if let depPlat = state.departurePlatform {
+            if display.showPlatformBadge, let depPlat = state.departurePlatform {
                 PlatformCard(
                     label: "DEP",
                     platform: depPlat,
                     changed: state.departurePlatformChanged
                 )
             }
-            if let arrPlat = state.arrivalPlatform {
+            if display.showPlatformBadge, let arrPlat = state.arrivalPlatform {
                 PlatformCard(
                     label: "ARR",
                     platform: arrPlat,
@@ -704,7 +733,7 @@ private struct LegLockScreenView: View {
     private var bottomRow: some View {
         HStack {
             // Operator
-            if !attrs.operatorName.isEmpty {
+            if display.showOperatorName, !attrs.operatorName.isEmpty {
                 Text(attrs.operatorName)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -787,6 +816,78 @@ private struct LegLockScreenView: View {
         case "onTrain": return .green
         case "arrived": return .green
         default: return .primary
+        }
+    }
+}
+
+// MARK: - Without a countdown
+
+/// What a boarding train says without a countdown: when it leaves, or
+/// that it's leaving now.
+private func departingLabel(_ state: LegActivityAttributes.ContentState, now: String) -> String {
+    guard let departs = state.departureDate, departs > state.lastUpdated,
+          let time = state.expectedDeparture ?? state.scheduledDeparture
+    else { return now }
+    return "Departs \(time)"
+}
+
+private func arrivingLabel(_ state: LegActivityAttributes.ContentState, now: String) -> String {
+    guard let arrives = state.arrivalDate, arrives > state.lastUpdated,
+          let time = state.expectedArrival ?? state.scheduledArrival
+    else { return now }
+    return "Arrives \(time)"
+}
+
+// MARK: - Progress and what's next
+
+/// How far through the train ride, filling from departure to arrival.
+/// The system moves it along by itself, between updates.
+private struct LegProgressBar: View {
+    let state: LegActivityAttributes.ContentState
+
+    var body: some View {
+        if let departs = state.departureDate, let arrives = state.arrivalDate, departs < arrives {
+            ProgressView(timerInterval: departs...arrives, countsDown: false) {
+                EmptyView()
+            } currentValueLabel: {
+                EmptyView()
+            }
+            .progressViewStyle(.linear)
+            .tint(state.isCancelled ? .red : .green)
+            .labelsHidden()
+        }
+    }
+}
+
+/// The train after this one, and when the whole journey arrives, each
+/// shown if switched on in Settings.
+private struct LegExtras: View {
+    let attrs: LegActivityAttributes
+    let display: LiveActivityDisplay
+
+    var body: some View {
+        let next = display.showNextConnection ? attrs.nextTrain : nil
+        let final = display.showFinalArrival ? attrs.finalArrival : nil
+        if next != nil || final != nil {
+            VStack(alignment: .leading, spacing: 3) {
+                if let next {
+                    Label {
+                        Text("Then \(next)" + (attrs.nextTrainPlatform.map { ", Plat \($0)" } ?? ""))
+                    } icon: {
+                        Image(systemName: "arrow.triangle.swap")
+                    }
+                }
+                if let final {
+                    Label {
+                        Text("Arrive \(attrs.finalDestinationName ?? "") \(final)")
+                    } icon: {
+                        Image(systemName: "flag.checkered")
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
     }
 }

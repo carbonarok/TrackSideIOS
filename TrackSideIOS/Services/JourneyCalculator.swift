@@ -401,7 +401,7 @@ final class JourneyCalculator {
                 failure = journeyError.message
                 break
             } catch {
-                failure = error.localizedDescription
+                failure = error.friendlyDescription
                 break
             }
             if Task.isCancelled { break }
